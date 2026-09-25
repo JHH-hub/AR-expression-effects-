@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#0a0710" />
+<meta name="description" content="AR 表情互动原型：微笑下雨、大笑烟花，粒子与头部实时物理碰撞。" />
+<title>微笑落雨 · 大笑烟花 — AR Expression Effects</title>
+<link rel="stylesheet" href="./src/styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff3d0'/%3E%3Cstop offset='.55' stop-color='%23ffd46b'/%3E%3Cstop offset='1' stop-color='%23ff3e8f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='13' fill='url(%23g)'/%3E%3C/svg%3E" />
+<script type="importmap">
+{
+  "imports": {
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
+  }
+}
+</script>
+</head>
+<body>
+<div id="stage">
+  <!-- video 仅作 MediaPipe 帧源与 GPU 纹理源，画面由 WebGL 统一合成 -->
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="fx"></canvas>
+
+  <!-- 顶部状态 -->
+  <header id="hud" class="hidden">
+    <div class="hud-main">
+      <span id="stateIcon" class="state-icon">🙂</span>
+      <span id="stateTag" class="state-text neutral">等待表情…</span>
+    </div>
+    <div class="meters">
+      <div class="meter">
+        <span class="m-label">微笑</span>
+        <span class="m-track"><i id="barSmile" class="m-fill cool"></i></span>
+        <span class="m-val" id="valSmile">0.00</span>
+      </div>
+      <div class="meter">
+        <span class="m-label">大笑</span>
+        <span class="m-track"><i id="barLaugh" class="m-fill warm"></i></span>
+        <span class="m-val" id="valLaugh">0.00</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 性能面板 -->
+  <section id="perf" class="hidden">
+    <div class="p-row"><span>FPS</span><b id="pFps">--</b></div>
+    <div class="p-row"><span>粒子</span><b id="pCount">0</b></div>
+    <div class="p-row"><span>画质</span><b id="pQuality">--</b></div>
+    <div class="p-row"><span>推理</span><b id="pInfer">0.0 ms</b></div>
+    <div class="p-row p-backend"><span>后端</span><b id="pBackend">-</b></div>
+  </section>
+
+  <!-- 校准浮层 -->
+  <div id="calib" class="hidden">
+    <svg class="ring" viewBox="0 0 80 80" aria-hidden="true">
+      <circle cx="40" cy="40" r="34" class="ring-bg" />
+      <circle cx="40" cy="40" r="34" class="ring-fg" id="calibRing" />
+    </svg>
+    <div class="calib-text">
+      <strong>正在校准你的中性表情</strong>
+      <span><i id="calibHint">请保持自然，不要笑</i>　<b id="calibPct">0%</b></span>
+    </div>
+  </div>
+
+  <!-- 底部控制 -->
+  <nav id="controls" class="hidden">
+    <button id="btnBurst" class="chip chip-primary">手动放一发</button>
+    <button id="btnRecal" class="chip">重新校准</button>
+    <button id="btnPerf" class="chip" aria-pressed="true">性能</button>
+  </nav>
+
+  <div id="toast"></div>
+
+  <!-- 启动页 -->
+  <div id="gate">
+    <div class="glow-bg" aria-hidden="true"></div>
+    <div class="card">
+      <span class="badge">AR INTERACTION PROTOTYPE</span>
+      <h1>微笑<em>落雨</em><br />大笑<em>绽放烟花</em></h1>
+      <p class="sub">
+        摄像头实时识别你的表情：微笑时细雨落下，大笑时烟花自口中迸发，
+        所有粒子都会与你的头部发生真实的物理碰撞与反弹。
+      </p>
+      <ul class="facts">
+        <li><b>本地运行</b>　画面与识别全部在浏览器内完成，不上传、不存储</li>
+        <li><b>GPU 粒子</b>　物理在显卡上模拟，可承载数万粒子</li>
+        <li><b>个人化校准</b>　启动后 1 秒采集你的中性表情基线</li>
+      </ul>
+      <button id="btnStart">开启摄像头 · 开始体验</button>
+      <p id="gateMsg" class="msg"></p>
+      <p class="tip">需要 HTTPS 环境与摄像头权限 · 建议光线充足、正对镜头</p>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
