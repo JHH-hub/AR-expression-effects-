@@ -5,3 +5,5 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+.box-agent/
+.deploy-state.json
