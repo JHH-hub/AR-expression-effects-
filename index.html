@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0710" />
 <meta name="description" content="AR 表情互动原型：微笑下雨、大笑烟花，粒子与头部实时物理碰撞。" />
 <title>微笑落雨 · 大笑烟花 — AR Expression Effects</title>
-<link rel="stylesheet" href="./src/styles.css" />
+<link rel="stylesheet" href="./src/styles.css?v=20260926" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff3d0'/%3E%3Cstop offset='.55' stop-color='%23ffd46b'/%3E%3Cstop offset='1' stop-color='%23ff3e8f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='13' fill='url(%23g)'/%3E%3C/svg%3E" />
 <script type="importmap">
 {
@@ -22,8 +22,27 @@
   <video id="cam" playsinline muted autoplay></video>
   <canvas id="fx"></canvas>
 
-  <!-- 顶部状态 -->
-  <header id="hud" class="hidden">
+  <!-- 直播间顶栏：主播卡 + 在线人数（直播特效的「场」由 UI 定义，不只靠粒子） -->
+  <header id="topbar" class="hidden">
+    <div class="anchor-card">
+      <span class="avatar"><i>😊</i></span>
+      <div class="anchor-meta">
+        <span class="anchor-name">微笑落雨直播间</span>
+        <span class="anchor-sub"><b id="viewers">1.2万</b> 人在看</span>
+      </div>
+      <span class="live-dot">LIVE</span>
+    </div>
+    <div class="top-right">
+      <span class="watchers">
+        <i class="wface">🙂</i><i class="wface">😄</i><i class="wface">🥳</i>
+        <b id="hypeCount">0</b>
+      </span>
+      <button id="btnPerf" class="icon-btn" aria-pressed="false" title="性能面板">📊</button>
+    </div>
+  </header>
+
+  <!-- 表情能量槽：直播间「人气进度条」的语言，而不是工程仪表 -->
+  <div id="hud" class="hidden">
     <div class="hud-main">
       <span id="stateIcon" class="state-icon">🙂</span>
       <span id="stateTag" class="state-text neutral">等待表情…</span>
@@ -40,7 +59,20 @@
         <span class="m-val" id="valLaugh">0.00</span>
       </div>
     </div>
-  </header>
+  </div>
+
+  <!-- 礼物横幅 + 连击：直播礼物的标志性 UI -->
+  <div id="gift" class="hidden">
+    <span class="gift-icon">🎆</span>
+    <div class="gift-text">
+      <strong>烟花绽放</strong>
+      <span>笑容点亮直播间</span>
+    </div>
+    <span class="gift-combo" id="giftCombo">x1</span>
+  </div>
+
+  <!-- 飘心流：直播间点赞的视觉签名 -->
+  <div id="hearts" aria-hidden="true"></div>
 
   <!-- 性能面板 -->
   <section id="perf" class="hidden">
@@ -63,11 +95,11 @@
     </div>
   </div>
 
-  <!-- 底部控制 -->
+  <!-- 底部控制：直播间输入条形态（假评论框 + 圆形礼物按钮） -->
   <nav id="controls" class="hidden">
-    <button id="btnBurst" class="chip chip-primary">手动放一发</button>
-    <button id="btnRecal" class="chip">重新校准</button>
-    <button id="btnPerf" class="chip" aria-pressed="true">性能</button>
+    <span class="fake-input">说点什么…</span>
+    <button id="btnRecal" class="round-btn" title="重新校准">🎯</button>
+    <button id="btnBurst" class="round-btn round-gift" title="放一发烟花">🎁</button>
   </nav>
 
   <div id="toast"></div>
@@ -76,24 +108,16 @@
   <div id="gate">
     <div class="glow-bg" aria-hidden="true"></div>
     <div class="card">
-      <span class="badge">AR INTERACTION PROTOTYPE</span>
-      <h1>微笑<em>落雨</em><br />大笑<em>绽放烟花</em></h1>
-      <p class="sub">
-        摄像头实时识别你的表情：微笑时细雨落下，大笑时烟花自口中迸发，
-        所有粒子都会与你的头部发生真实的物理碰撞与反弹。
-      </p>
-      <ul class="facts">
-        <li><b>本地运行</b>　画面与识别全部在浏览器内完成，不上传、不存储</li>
-        <li><b>GPU 粒子</b>　物理在显卡上模拟，可承载数万粒子</li>
-        <li><b>个人化校准</b>　启动后 1 秒采集你的中性表情基线</li>
-      </ul>
-      <button id="btnStart">开启摄像头 · 开始体验</button>
+      <span class="badge">LIVE 表情特效</span>
+      <h1>笑一下<br />就<em>放烟花</em></h1>
+      <p class="sub">笑得越猛，连击越高，排面越大。</p>
+      <button id="btnStart">开启摄像头 · 进入直播间</button>
       <p id="gateMsg" class="msg"></p>
-      <p class="tip">需要 HTTPS 环境与摄像头权限 · 建议光线充足、正对镜头</p>
+      <p class="tip">画面全部本地处理，不上传不存储</p>
     </div>
   </div>
 </div>
 
-<script type="module" src="./src/main.js"></script>
+<script type="module" src="./src/main.js?v=20260926"></script>
 </body>
 </html>

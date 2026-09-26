@@ -35,9 +35,51 @@ export class UI {
       btnBurst: $('btnBurst'),
       btnRecal: $('btnRecal'),
       toast: $('toast'),
+      topbar: $('topbar'),
+      viewers: $('viewers'),
+      hypeCount: $('hypeCount'),
+      gift: $('gift'),
+      giftCombo: $('giftCombo'),
+      hearts: $('hearts'),
     };
     this._lastState = -1;
     this._toastTimer = 0;
+    this._giftTimer = 0;
+    this._lastCombo = -1;
+    this._hypeAcc = 0;
+    this._viewers = 12000;
+    this._heartPool = [];
+    this._heartCursor = 0;
+    this._buildHearts();
+  }
+
+  /* ---------- 飘心（直播间点赞的视觉签名） ----------
+   * 预建 12 个节点循环复用：运行期不再 createElement，
+   * 动画走 CSS transform + opacity，全程在合成线程，不占主线程帧预算。
+   */
+  _buildHearts() {
+    const box = this.el.hearts;
+    if (!box) return;
+    const faces = ['❤️', '🧡', '💛', '✨', '🎉'];
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement('i');
+      s.className = 'heart';
+      s.textContent = faces[i % faces.length];
+      box.appendChild(s);
+      this._heartPool.push(s);
+    }
+  }
+
+  /** 放一个飘心。同一节点重启动画需先移除 class 并强制 reflow 读一次 */
+  popHeart() {
+    if (!this._heartPool.length) return;
+    const el = this._heartPool[this._heartCursor];
+    this._heartCursor = (this._heartCursor + 1) % this._heartPool.length;
+    el.classList.remove('fly');
+    void el.offsetWidth;
+    el.style.setProperty('--dx', `${(Math.random() - 0.5) * 60}px`);
+    el.style.setProperty('--dur', `${1.5 + Math.random() * 0.9}s`);
+    el.classList.add('fly');
   }
 
   /* ---------- 启动页 ---------- */
@@ -57,7 +99,10 @@ export class UI {
     this.el.gate.classList.add('hidden');
     this.el.hud.classList.remove('hidden');
     this.el.controls.classList.remove('hidden');
-    this.el.perf.classList.remove('hidden');
+    if (this.el.topbar) this.el.topbar.classList.remove('hidden');
+    // 性能面板默认收起：直播间里工程仪表盘是噪音，需要时用按钮唤出
+    this.el.perf.classList.add('hidden');
+    if (this.el.btnPerf) this.el.btnPerf.setAttribute('aria-pressed', 'false');
   }
 
   /* ---------- 校准 ---------- */
@@ -114,6 +159,58 @@ export class UI {
     this.el.pBackend.textContent = backend;
   }
 
+  /* ---------- 礼物横幅 / 连击 ---------- */
+
+  /** 触发礼物横幅并更新连击数（数字做弹跳，连击感的关键） */
+  showGift(combo) {
+    const g = this.el.gift;
+    if (!g) return;
+    g.classList.remove('hidden');
+    g.classList.remove('pop');
+    void g.offsetWidth;
+    g.classList.add('pop');
+    if (combo !== this._lastCombo) {
+      this._lastCombo = combo;
+      this.el.giftCombo.textContent = `x${combo}`;
+    }
+    // 连击越高，横幅热度等级越高（配色随之升级）
+    g.dataset.tier = combo >= 6 ? 'hot' : combo >= 3 ? 'warm' : 'base';
+    this.popHeart();
+    this.popHeart();
+    clearTimeout(this._giftTimer);
+    this._giftTimer = setTimeout(() => this.hideGift(), 3200);
+  }
+
+  hideGift() {
+    if (!this.el.gift) return;
+    this.el.gift.classList.add('hidden');
+    this._lastCombo = -1;
+  }
+
+  /**
+   * 直播间热度：微笑时持续冒飘心 + 在线人数随表情强度缓慢上涨。
+   * 这是「有人在看、有人在互动」的错觉来源，纯 UI 成本极低。
+   */
+  setHype(smile, laugh, combo) {
+    const heat = Math.max(smile, laugh);
+    this._hypeAcc += heat;
+    if (this._hypeAcc > 1.1) {
+      this._hypeAcc = 0;
+      this.popHeart();
+    }
+    if (heat > 0.25) {
+      this._viewers += Math.round(heat * 9);
+      if (this.el.viewers) {
+        this.el.viewers.textContent = this._viewers >= 10000
+          ? `${(this._viewers / 10000).toFixed(1)}万`
+          : String(this._viewers);
+      }
+    }
+    if (this.el.hypeCount) {
+      this.el.hypeCount.textContent = String(combo);
+    }
+  }
+
   toast(text, ms = 2600) {
     const el = this.el.toast;
     el.textContent = text;
@@ -126,9 +223,11 @@ export class UI {
     this.el.btnStart.addEventListener('click', handlers.onStart);
     this.el.btnBurst.addEventListener('click', handlers.onBurst);
     this.el.btnRecal.addEventListener('click', handlers.onRecalibrate);
-    this.el.btnPerf.addEventListener('click', (e) => {
-      const hidden = this.el.perf.classList.toggle('hidden');
-      e.currentTarget.setAttribute('aria-pressed', String(!hidden));
-    });
+    if (this.el.btnPerf) {
+      this.el.btnPerf.addEventListener('click', (e) => {
+        const hidden = this.el.perf.classList.toggle('hidden');
+        e.currentTarget.setAttribute('aria-pressed', String(!hidden));
+      });
+    }
   }
 }

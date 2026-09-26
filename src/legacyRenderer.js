@@ -73,17 +73,23 @@ export class LegacyRenderer {
     const ctx = this.ctx;
     const W = this.W, H = this.H;
 
-    // 摄像头：镜像 + cover
+    // 摄像头：镜像 + cover（含镜头震动偏移，与 WebGL 路径观感对齐）
     if (this.video && this.video.readyState >= 2) {
       const sc = Math.max(W / this.vw, H / this.vh);
       const dw = this.vw * sc, dh = this.vh * sc;
+      const sx = mood.shakeX || 0;
+      const sy = mood.shakeY || 0;
       ctx.save();
       ctx.translate(W, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(this.video, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      ctx.drawImage(this.video, (W - dw) / 2 + sx, (H - dh) / 2 + sy, dw, dh);
       ctx.restore();
-      ctx.fillStyle = 'rgba(8, 8, 16, 0.26)';  // 压暗，让粒子成为主角
+      // 直播取向：提亮暖肤，而不是压暗。Canvas2D 无法做磨皮，用暖光叠加代偿
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(38, 26, 18, 0.16)';
       ctx.fillRect(0, 0, W, H);
+      ctx.restore();
     } else {
       ctx.fillStyle = '#07070c';
       ctx.fillRect(0, 0, W, H);

@@ -87,10 +87,11 @@ function makeFbo(gl, textures) {
 
 /* ---------------- 质量档位 ---------------- */
 // texSize² = 粒子容量。rainRatio 决定雨与火花的槽位切分。
+// beauty：磨皮强度。低端机降到 0 可省下 4 次纹理采样 / 像素。
 export const QUALITY = [
-  { name: 'LOW',  texSize: 96,  rainRatio: 0.090, dpr: 1.0,  bloom: 1.05, detectEvery: 2 },
-  { name: 'MID',  texSize: 160, rainRatio: 0.080, dpr: 1.25, bloom: 1.15, detectEvery: 1 },
-  { name: 'HIGH', texSize: 256, rainRatio: 0.075, dpr: 1.5,  bloom: 1.25, detectEvery: 1 },
+  { name: 'LOW',  texSize: 96,  rainRatio: 0.090, dpr: 1.0,  bloom: 1.05, detectEvery: 2, beauty: 0.00 },
+  { name: 'MID',  texSize: 160, rainRatio: 0.080, dpr: 1.25, bloom: 1.15, detectEvery: 1, beauty: 0.55 },
+  { name: 'HIGH', texSize: 256, rainRatio: 0.075, dpr: 1.5,  bloom: 1.25, detectEvery: 1, beauty: 0.78 },
 ];
 
 export class GLRenderer {
@@ -592,6 +593,10 @@ export class GLRenderer {
     gl.uniform2f(u.uVideoOffset, (1 - dw) / 2, (1 - dh) / 2);
     gl.uniform2f(u.uScreen, this.W, this.H);
     gl.uniform1f(u.uBloomStrength, this.quality.bloom * (mood.bloomBoost || 1));
+    // 震动在 uv 空间做偏移：不改 canvas 尺寸也不触发 layout，零重排开销
+    gl.uniform2f(u.uShake, (mood.shakeX || 0) / this.W, (mood.shakeY || 0) / this.H);
+    gl.uniform1f(u.uBeauty, this.quality.beauty);
+    gl.uniform2f(u.uTexel, 1 / vw, 1 / vh);
 
     const h = this.head;
     gl.uniform4f(u.uHead, h.x, h.y, Math.max(h.rx, 1), Math.max(h.ry, 1));

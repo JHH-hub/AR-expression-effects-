@@ -23,9 +23,11 @@ const DEFAULTS = {
   enterFrames: 2,
   exitFrames: 9,
   smoothing: 0.30,
-  calibrateSeconds: 1.2,
-  burstCooldown: 0.42,
-  sustainInterval: 0.62,
+  // 0.9s：直播特效讲「摩擦力归零」，1.2s 空等已经能让人划走
+  calibrateSeconds: 0.9,
+  burstCooldown: 0.38,
+  // 连击节奏：0.62s → 0.52s，让持续大笑的连击涨得更有推背感
+  sustainInterval: 0.52,
 };
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);

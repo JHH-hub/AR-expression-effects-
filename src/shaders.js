@@ -517,6 +517,9 @@ uniform float uMoodWarm;     // 大笑氛围
 uniform float uFlash;        // 爆发瞬间闪光
 uniform vec3  uShock;        // xy = 中心, z = 半径
 uniform float uShockLife;
+uniform vec2  uShake;        // 镜头震动偏移（归一化 uv 空间）
+uniform float uBeauty;       // 美颜强度 0..1
+uniform vec2  uTexel;        // 视频层 1 像素对应的 uv 步长
 
 out vec4 oColor;
 
@@ -530,21 +533,56 @@ vec3 filmic(vec3 x) {
   return clamp(a / b, 0.0, 1.0);
 }
 
+/**
+ * 轻量磨皮（direct-light 直播标配的第一层）。
+ *
+ * 用「十字 5-tap 均值」当低频估计，再按与中心的亮度差做保边混合：
+ * 差异小 = 皮肤区域 → 取模糊值（磨掉噪点与毛孔）；
+ * 差异大 = 眼睛/眉毛/嘴唇/发丝边缘 → 保留原值（不糊五官）。
+ * 只花 5 次纹理采样，远低于双边滤波，手机端可承受。
+ */
+vec3 smoothSkin(vec2 uv, vec3 center, float amount) {
+  if (amount <= 0.001) return center;
+  vec2 s = uTexel * 2.0;
+  vec3 sum = center;
+  sum += texture(uVideo, clamp(uv + vec2(s.x, 0.0), 0.0, 1.0)).rgb;
+  sum += texture(uVideo, clamp(uv - vec2(s.x, 0.0), 0.0, 1.0)).rgb;
+  sum += texture(uVideo, clamp(uv + vec2(0.0, s.y), 0.0, 1.0)).rgb;
+  sum += texture(uVideo, clamp(uv - vec2(0.0, s.y), 0.0, 1.0)).rgb;
+  vec3 blurred = sum * 0.2;
+
+  float lc = dot(center,  vec3(0.2126, 0.7152, 0.0722));
+  float lb = dot(blurred, vec3(0.2126, 0.7152, 0.0722));
+  // 边缘保护：亮度差超过 ~0.09 就快速回到原图，五官不被糊掉
+  float edge = smoothstep(0.035, 0.115, abs(lc - lb));
+  vec3 skin = mix(blurred, center, edge);
+  return mix(center, skin, amount);   // amount=0 时严格等于原图
+}
+
 void main() {
   vec2 px = vUv * uScreen;
 
-  /* -- 摄像头层：镜像 + cover + 压成低对比冷底，让粒子成为唯一主角 -- */
-  vec2 vuv = (vUv - uVideoOffset) / uVideoScale;
+  /* -- 摄像头层：镜像 + cover + 直播级美颜与提亮，人是主角 -- */
+  vec2 vuv = (vUv - uVideoOffset + uShake) / uVideoScale;
   vuv.x = 1.0 - vuv.x;
-  vec3 cam = texture(uVideo, clamp(vuv, 0.0, 1.0)).rgb;
+  vuv = clamp(vuv, 0.0, 1.0);
+  vec3 cam = texture(uVideo, vuv).rgb;
+  cam = smoothSkin(vuv, cam, uBeauty);
+
+  // 提亮 + 抬中间调（直播补光观感），不再压暗
+  cam = pow(max(cam, 0.0), vec3(0.90)) * 1.06;
+  // 暖肤：给红/黄通道一点偏置，抵消摄像头常见的青绿肤色
+  cam *= vec3(1.045, 1.005, 0.975);
+  // 轻微提饱和，避免高对比色特效把人脸衬成灰的
   float luma = dot(cam, vec3(0.2126, 0.7152, 0.0722));
-  cam = mix(vec3(luma), cam, 0.72);               // 轻微去饱和
-  cam = pow(max(cam, 0.0), vec3(1.12)) * 0.80;    // 压暗提反差
+  cam = mix(vec3(luma), cam, 1.16);
+  // 柔光叠加：把亮部再提一档，形成「打了柔光箱」的直播质感
+  cam = mix(cam, 1.0 - (1.0 - cam) * (1.0 - cam), 0.16);
 
   /* -- 氛围光 -- */
   float topGrad = smoothstep(0.85, 0.0, vUv.y);
-  cam += vec3(0.16, 0.30, 0.52) * topGrad * uMoodCool * 0.55;
-  cam += vec3(0.42, 0.20, 0.06) * uMoodWarm * 0.28;
+  cam += vec3(0.16, 0.30, 0.52) * topGrad * uMoodCool * 0.42;
+  cam += vec3(0.42, 0.20, 0.06) * uMoodWarm * 0.26;
 
   /* -- 头部辉光环：碰撞可见性的主要载体，必须细而亮，宽了会糊成甜甜圈 -- */
   if (uHeadValid > 0.5) {
@@ -572,9 +610,10 @@ void main() {
   col += vec3(1.0, 0.86, 0.60) * uFlash * 0.30;
 
   /* -- 暗角 + 色调 + tonemap -- */
+  // 暗角刻意做浅：直播间要「亮堂」，重暗角会让人脸看着脏
   vec2 q = vUv - 0.5;
-  col *= 1.0 - dot(q, q) * 0.72;
-  col = filmic(col * 1.06);
+  col *= 1.0 - dot(q, q) * 0.34;
+  col = filmic(col * 1.02);
   col = mix(col, col * vec3(1.03, 0.99, 1.02), 0.5);  // 极轻的品红倾向
 
   // 弱噪点：抵消暗部 8bit 色带，顺带去掉「CG 塑料感」
