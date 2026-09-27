@@ -50,18 +50,24 @@ export class LegacyRenderer {
   /** Canvas2D 无法做磨皮，仅为接口一致而存在 */
   setBeauty(on) { this.beautyOn = !!on; }
 
-  burst(x, y, power = 1) {
-    this.sparks.burst(x, y, Math.round(this.sparks.cap * this.quality.sparkRatio * 0.5), power);
+  /**
+   * 降级路径的爆发。参数与 GLRenderer.burst 对齐
+   * （shell/willow 此处仅用于近似初速缩放，Canvas2D 不做垂柳异质星）。
+   */
+  burst(x, y, power = 1, ratio = 0.26, shell = 1) {
+    const n = Math.round(this.sparks.cap * this.quality.sparkRatio * 0.5 * Math.min(shell, 1.3));
+    this.sparks.burst(x, y, Math.max(8, n), power);
   }
 
-  stream(x, y, count) {
+  /** 缓慢上浮的光尘，与 WebGL 路径保持同一观感（低初速、宽度随笑张开） */
+  stream(x, y, count, width = 70) {
     for (let i = 0; i < count; i++) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.9;
-      const sp = 60 + Math.random() * 170;
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.1;
+      const sp = 14 + Math.random() * 46;
       this.sparks.spawn(
-        x + (Math.random() - 0.5) * 110, y + (Math.random() - 0.5) * 30,
+        x + (Math.random() - 0.5) * width, y + (Math.random() - 0.5) * width * 0.35,
         Math.cos(a) * sp, Math.sin(a) * sp,
-        0.5 + Math.random() * 0.6, 1.6 + Math.random() * 1.6, 1,
+        0.85 + Math.random() * 0.95, 1.2 + Math.random() * 1.2, 1,
       );
     }
   }

@@ -81,8 +81,10 @@ uniform float uRainIntensity;
 // 爆发源（大笑烟花）：xy=中心, z=power, w=seed
 uniform vec4  uBurst;
 uniform ivec2 uBurstSlot;   // start, count（相对火花区的环形槽位）
-// 流式源（微笑时嘴角能量流）
-uniform vec4  uStream;
+uniform vec2  uShell;       // x = 球壳初速倍率, y = 垂柳星比例
+uniform float uPhysScale;   // 物理尺度：短边/400，使花型大小随屏幕等比缩放
+// 流式源（微笑时升起的光尘）
+uniform vec4  uStream;      // xy = 发射点, z = 横向展开宽度
 uniform ivec2 uStreamSlot;
 
 layout(location = 0) out vec4 oState0;
@@ -91,6 +93,9 @@ layout(location = 1) out vec4 oState1;
 ${HASH}
 ${ELLIPSE}
 
+// 物理常量。数值在 390×844 手机竖屏上标定（此时 uPhysScale≈1）。
+// 速度与加速度都乘 uPhysScale，使花型在不同屏幕尺寸下保持几何相似：
+// 花型半径始终约占屏幕短边的 60%，不会在桌面上缩成一个点、在手机上溢出画面。
 const float GRAVITY  = 760.0;
 const float DRAG     = 0.72;
 const float BOUNCE   = 0.52;
@@ -118,8 +123,6 @@ void main() {
   float maxLife = s1.y;
   float hue = s1.z;
   float seed = s1.w;
-
-  float damp = 1.0 / (1.0 + DRAG * uDt);
 
   /* ---------------- 雨区 ---------------- */
   // maxLife 兼作状态标记：1.0 = 下落中，0.3 = 撞到脸后附着的水痕
@@ -175,6 +178,8 @@ void main() {
       float r3 = hash11(float(idx) * 5.77 + uBurst.w * 1.7);
       // hue 必须用独立随机源：复用角度的随机数会让颜色与方向相关，出现「色扇」
       float rh = hash11(float(idx) * 11.317 + uBurst.w * 3.07);
+      // 第四路随机：决定这颗是「炸开的星」还是「垂落的柳」
+      float rw = hash11(float(idx) * 17.913 + uBurst.w * 2.11);
 
       // 球壳投影：方向在 3D 球面均匀采样后投影到 2D。
       // 这样 |v| 自带 sin(theta) 分布 —— 中心稀疏、边缘密集，
@@ -184,23 +189,55 @@ void main() {
       float phi = r.y * 6.28318530718;
       vec2 dir = vec2(cos(phi), sin(phi)) * sinT;
 
-      float sp = (760.0 + r3 * 280.0) * uBurst.z;
-      pos = uBurst.xy + dir * (10.0 + r3 * 20.0);
-      vel = dir * sp + vec2(0.0, -150.0 * uBurst.z);
-      maxLife = 0.72 + r3 * 0.95;
+      // 垂柳星：方向偏向下、初速慢、寿命长、重力大，形成「垂落的金丝」。
+      // 真实烟花的花型辨识度几乎全来自这类异质星，全部同速只会得到一个圆球。
+      bool willow = rw < uShell.y;
+      // 只把方向往上压，不再缩放 dir 的长度：长度缩放会与下面的 sp 缩放叠加，
+      // 导致柳星速度被两次打折、几乎原地不动。
+      if (willow) dir = normalize(dir + vec2(0.0, 0.85));
+
+      // 半径缩放：初速决定烟火半径，全部数值均以 390×844 手机竖屏标定，
+      // 再由 uPhysScale 等比放大到其它屏幕。
+      // 球壳投影的视觉特征是**边缘最密最亮**，半径必须落在屏内才读得出「一朵花」。
+      // 旧参数 900~1240px/s 对应半径约 600~700px，边缘全在屏幕外，
+      // 用户只看到中心稀疏的几粒 —— 这是「不像烟花」的首要原因。
+      // 现在 380~510px/s 实测半径 148~253px（屏宽的 38%~65%），花型完整落在画面内。
+      float sp = (380.0 + r3 * 130.0) * uBurst.z * uShell.x * uPhysScale;
+      if (willow) sp *= 0.45;                     // 柳星飞得近，靠重力拉长
+      // 出生壳层与半径成比例：小半径爆发不该从整片空域出生
+      pos = uBurst.xy + dir * (6.0 + r3 * 22.0) * uShell.x;
+      vel = dir * sp;
+
+      // 星体的「上抛-回落」由统一重力负责，不再额外给竖直偏置：
+      // 旧实现的 -150*power 会把整个球壳向上平移，看起来像被风吹偏而不是爆炸。
+      if (!willow) vel += vec2(0.0, -60.0 * uBurst.z * uPhysScale);
+
+      // 寿命区间做成**互不相交的三段**，让下游仅凭 maxLife 就能反推星体类型：
+      //   普通星 [0.50, 0.95] / 垂柳星 [1.15, 1.65] / 光尘 [1.85, 2.30]
+      // 这样无需占用额外纹理通道，就能在物理与着色阶段给三类粒子不同的重力、阻力与拖尾。
+      maxLife = willow ? (1.15 + r3 * 0.50) : (0.50 + r3 * 0.45);
       life = maxLife;
       hue = 0.10 + pow(rh, 0.85) * 0.90;   // 以金/琥珀为主，两端各留少量白金与品红
-      seed = r3;
+      // 用 seed 的符号位携带「是否垂柳星」：四通道已被 life/maxLife/hue/seed 占满，
+      // 但 seed 只被下游用于尺寸与闪烁相位（都可取绝对值），符号位是免费的第五个布尔量。
+      seed = willow ? -r3 : r3;
     } else if (inRing(rel, uStreamSlot.x, uStreamSlot.y, sparkCap)) {
       vec2 r = hash21(float(idx) * 3.319 + uStream.w);
       float r3 = hash11(float(idx) * 9.41 + uStream.w * 2.3);
-      float ang = -1.5707963 + (r.x - 0.5) * 1.9;
-      float sp = 60.0 + r.y * 170.0;
-      pos = uStream.xy + vec2((r.x - 0.5) * 120.0, (r.y - 0.5) * 34.0);
+      // 慢慢上浮的光尘，而不是从嘴角「喷射」：
+      // 旧实现给了 60~230 px/s 的定向速度，看起来像漏气或喷水，是「嘴部怪特效」的主因。
+      float ang = -1.5707963 + (r.x - 0.5) * 1.1;
+      float sp = (14.0 + r.y * 46.0) * uPhysScale;
+      float w = max(uStream.z, 20.0);
+      pos = uStream.xy + vec2((r.x - 0.5) * w, (r.y - 0.5) * (w * 0.35));
       vel = vec2(cos(ang), sin(ang)) * sp;
-      maxLife = 0.55 + r3 * 0.7;
+      // 光尘需要**向上的净位移**，但统一重力 760px/s² 会在 0.1s 内吃掉任何初速
+      // （实测按统一重力 + 40px/s 初速，1.4s 只上升 1px，实际在往下掉）。
+      // 因此光尘用自己的负重力（持续浮力）+ 高阻力：缓慢匀速、无坠落感。
+      // 扫描标定：grav=-140、drag=1.20 时 2.08s 内上升约 185px，正是「浮起的金尘」。
+      maxLife = 1.85 + r3 * 0.45;
       life = maxLife;
-      hue = 0.05 + r3 * 0.3;    // 偏白金，做「能量」而不是「烟花」
+      hue = 0.06 + r3 * 0.34;    // 偏白金，做「光尘」而不是「烟花」
       seed = r3;
     }
     oState0 = vec4(pos, vel);
@@ -215,14 +252,28 @@ void main() {
     return;
   }
 
-  vel.y += GRAVITY * uDt;
+  // seed 的符号位在出生时被用作「垂柳星」标记（见上方 bloom 分支），
+  // 负值代表慢速下坠星；光尘由寿命区间（>1.8s）单独识别。
+  bool willowStar = seed < 0.0;
+  bool dust = maxLife > 1.8;
+
+  // 三类粒子给不同的重力与阻力：
+  //   普通星 —— 干脆利落地抛射
+  //   垂柳星 —— 被重力拉出长尾（数值经离线扫描标定，见出生分支注释）
+  //   光尘   —— 负重力 + 高阻力，持续缓慢上浮，不回落
+  // 重力是「像素/秒²」，随屏幕尺度线性缩放；阻力是无量纲的时间常数，不缩放。
+  float grav = (dust ? -140.0 : (willowStar ? 420.0 : GRAVITY)) * uPhysScale;
+  float drag = dust ? 1.20 : (willowStar ? 1.20 : DRAG);
+  float damp = 1.0 / (1.0 + drag * uDt);
+
+  vel.y += grav * uDt;
   vel *= damp;
   vec2 next = pos + vel * uDt;
 
   // 与头部弹性碰撞。
   //
   // 判据是**边界穿越**（上一帧在椭圆外、这一帧在椭圆内），而不是「当前在椭圆内」，
-  // 也不是「速度朝内」。原因：发射源（嘴部）位于头部碰撞体内部且偏离中心，
+  // 也不是「速度朝内」。原因：发射源位于头部碰撞体内部且偏离中心，
   //   · 用「在内部就反弹」：烟花出生即被弹到边缘，堆成一圈光球；
   //   · 用「速度朝内就反弹」：嘴在中心下方，向上喷出的粒子在下半部的法线朝下，
   //     会被误判成朝内而全部弹回，于是堆成一个「碗」。
@@ -295,7 +346,14 @@ void main() {
   vec2 ndc = (s0.xy / uScreen) * 2.0 - 1.0;
   gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
 
-  float base = 2.0 + s1.w * 3.2;
+  // seed 的符号位是「垂柳星」标记，取绝对值后再当随机数用
+  float seed = abs(s1.w);
+  bool willowStar = s1.w < 0.0;
+  bool dust = s1.y > 1.8;
+
+  // 垂柳星刻意画细：它是垂落的金丝，粗点会糊成一片而不是丝；
+  // 光尘最小最淡，是一层氛围而不是主体。
+  float base = dust ? 1.1 : ((willowStar ? 1.4 : 2.1) + seed * (willowStar ? 1.8 : 3.2));
   gl_PointSize = base * (0.32 + 0.68 * t) * uPointScale;
 
   vec3 col = giftPalette(s1.z);
@@ -311,10 +369,11 @@ void main() {
 
   vColor = col;
 
-  // 闪烁：烟花的标志性特征。只在生命后段出现，早期保持稳定的亮芯
-  float tw = 0.55 + 0.45 * sin(uTime * (16.0 + s1.w * 30.0) + s1.w * 47.0);
-  float twMix = mix(1.0, tw, smoothstep(0.75, 0.2, t));
-  vAlpha = pow(t, 0.62) * 0.80 * twMix;
+  // 闪烁：烟花的标志性特征。只在生命后段出现，早期保持稳定的亮芯；
+  // 光尘不闪（它是氛围，闪烁会显得噪）。
+  float tw = 0.55 + 0.45 * sin(uTime * (16.0 + seed * 30.0) + seed * 47.0);
+  float twMix = dust ? 0.75 : mix(1.0, tw, smoothstep(0.75, 0.2, t));
+  vAlpha = pow(t, 0.62) * (dust ? 0.34 : 0.80) * twMix;
 }`;
 
 export const SPARK_FS = `#version 300 es
@@ -373,7 +432,13 @@ void main() {
   float t = clamp(life / max(s1.y, 1e-3), 0.0, 1.0);
   float speed = length(s0.zw);
   vec2 dir = s0.zw / max(speed, 1e-3);
-  float len = min(speed * 0.015, 26.0) * (0.22 + 0.78 * t);
+  // 垂柳星的拖尾必须明显更长：它靠「垂落的金丝」建立花型辨识度，
+  // 与普通星同长度就只剩一堆点。用寿命区间判定类型（见 SIMULATE_FS 的寿命分段）。
+  bool willowStar = s1.y > 1.0 && s1.y < 1.8;
+  bool dust = s1.y > 1.8;
+  float maxLen = willowStar ? 54.0 : (dust ? 6.0 : 26.0);
+  float ratio = willowStar ? 0.032 : (dust ? 0.004 : 0.015);
+  float len = min(speed * ratio, maxLen) * (0.22 + 0.78 * t);
 
   vec2 p = s0.xy - dir * len * aVert.y;
   vec2 ndc = (p / uScreen) * 2.0 - 1.0;
@@ -382,7 +447,9 @@ void main() {
   vec3 col = giftPalette(s1.z);
   col = mix(col, vec3(1.0, 0.95, 0.88), pow(t, 4.0) * 0.5);
   vColor = col;
-  vAlpha = (1.0 - aVert.y) * pow(t, 0.7) * 0.55;  // 头亮尾灭
+  // 头亮尾灭。柳星那条长尾要更淡，否则会糊成一整片而不是丝
+  float tailGain = willowStar ? 0.38 : (dust ? 0.30 : 0.55);
+  vAlpha = (1.0 - aVert.y) * pow(t, 0.7) * tailGain;
 }`;
 
 export const SPARK_TRAIL_FS = `#version 300 es

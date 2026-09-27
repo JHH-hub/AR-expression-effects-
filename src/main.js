@@ -134,20 +134,46 @@ function loop(now) {
     ui.toast('校准完成 · 试着笑一下');
   }
 
-  /* 3) 特效指令 */
-  const emitX = mouth.ok ? mouth.x : W * 0.5;
-  const emitY = mouth.ok ? mouth.y : H * 0.42;
+  /* 3) 特效指令
+   *
+   * 坐标系说明（回答「为什么不该从嘴部冒粒子」）：
+   *   真实烟花是**在空中某点炸开**，观者在下方仰视。把发射源钉在嘴上，
+   *   视觉上会读成「从嘴里吐出东西」——既不像烟花，也是之前那个「嘴部怪特效」的来源。
+   *   现在改成：烟花在画面空域炸开（默认口部上方远得多的地方），
+   *   口部只保留「缓慢上浮的光尘」，作为「笑」与「特效」的轻量绑定信号。
+   */
+  const mouthX = mouth.ok ? mouth.x : W * 0.5;
+  const mouthY = mouth.ok ? mouth.y : H * 0.52;
+
+  // 烟花爆炸中心：从口部沿「头心 -> 口部」方向继续外推，落在面部前方的空域。
+  // 没有头部信息时退化为画面上方的固定位置。
+  let burstX = W * 0.5;
+  let burstY = H * 0.34;
+  if (head.valid) {
+    const dx = mouthX - head.x;
+    const dy = mouthY - head.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const faceR = Math.max(head.rx, head.ry);
+    // 外推量随头部大小缩放，小脸不会把烟花顶到屏幕外
+    const reach = faceR * 2.05;
+    burstX = mouthX + (dx / len) * reach * 0.55;
+    burstY = mouthY + (dy / len) * reach - faceR * 0.35;
+    burstX = Math.min(Math.max(burstX, W * 0.16), W * 0.84);
+    burstY = Math.min(Math.max(burstY, H * 0.14), H * 0.62);
+  }
+
+  // 光尘宽度：随微笑程度张开，弱笑时聚在口鼻附近，大笑时铺满面部
+  const dustW = Math.max(head.rx, W * 0.10) * (0.85 + fsm.smile * 1.35);
 
   // 校准期也给环绕金粉：摩擦力归零原则要求「开摄像头即有反馈」，不能空等 1 秒
   if (fsm.calibrating) {
     if (head.valid) {
       const a = now * 0.0021;
       const r = Math.max(head.rx, head.ry) * 1.28;
-      renderer.stream(head.x + Math.cos(a) * r, head.y + Math.sin(a) * r * 0.72, 3);
+      renderer.stream(head.x + Math.cos(a) * r, head.y + Math.sin(a) * r * 0.72, 3, r * 0.5);
     } else {
-      renderer.stream(W * 0.5, H * 0.42, 2);
-    }
-    renderer.setHead(head);
+      renderer.stream(W * 0.5, H * 0.42, 2, W * 0.12);
+    }    renderer.setHead(head);
     renderer.setRain(0);
     updateMood(dt, st);
     renderer.uploadVideo(video);
@@ -155,14 +181,14 @@ function loop(now) {
     return;
   }
 
-  if (st.burst) fireFrom(emitX, emitY);
+  if (st.burst) fireFrom(burstX, burstY);
 
-  // 微笑时嘴角持续溢出金色能量流 —— 把「笑」和「特效」在视觉上绑定
+  // 微笑时光尘缓慢上浮 —— 把「笑」和「特效」绑定，但不做定向喷射
   if (st.state === State.SMILE && mouth.ok) {
     const n = Math.round(fsm.smile * 5) + 1;
-    renderer.stream(emitX, emitY, n);
+    renderer.stream(mouthX, mouthY - head.ry * 0.12, n, dustW);
   } else {
-    renderer.stream(0, 0, 0);
+    renderer.stream(0, 0, 0, 0);
   }
 
   // 延迟爆发出队
@@ -170,7 +196,7 @@ function loop(now) {
     pending[i].t -= dt;
     if (pending[i].t <= 0) {
       const b = pending[i];
-      renderer.burst(b.x, b.y, b.power, b.ratio);
+      renderer.burst(b.x, b.y, b.power, b.ratio, b.shell, b.willow);
       pending.splice(i, 1);
     }
   }
@@ -200,11 +226,12 @@ function loop(now) {
 /**
  * 礼物级爆发。
  *
- * 结构参考直播礼物动效的三段式节奏（登场 → 高潮 → 余韵）：
- *   0.00s 主爆（球壳投影，最亮最快）
- *   0.13s 二段余爆（偏移、更小）
- *   0.27s 三段金粉（最慢、最散，负责「余韵」）
- * 规模、闪光、震动都随连击递增，让第 5 发明显比第 1 发有排面。
+ * 形态学依据（真实烟花为什么好看）：
+ *   1. **异质星**：牡丹型 + 垂柳型混装。全同速同寿命只会得到一颗单调的球，
+ *      花型辨识度几乎全来自「垂落金丝」这类慢速下坠星。
+ *   2. **半径与画面成比例**：初速决定烟火半径，一次爆发要覆盖半个屏高才叫「炸开」。
+ *   3. **多段节奏**：主角 + 余爆 + 金粉，形成 0.4~0.6s 的叙事而非一次性爆开。
+ * 规模、闪光、震动随连击递增，让第 5 发明显比第 1 发有排面。
  */
 function fireFrom(x, y) {
   combo.n += 1;
@@ -215,27 +242,32 @@ function fireFrom(x, y) {
   const c = Math.min(combo.n, 8);
   const gain = 1 + (c - 1) * 0.13;          // 1.00 → 1.91
   const spread = 1 + (c - 1) * 0.10;
+  // 烟火半径随连击略涨：低连击朴素，高连击铺满画面
+  const shell = Math.min(0.72 + (c - 1) * 0.055, 1.20);
 
-  renderer.burst(x, y, 1 * Math.min(gain, 1.55), 0.055 * gain);
+  // 主角：牡丹 + 垂柳混装
+  renderer.burst(x, y, 1 * Math.min(gain, 1.55), 0.060 * gain, shell, 0.30);
+  // 二段余爆：偏移、更小、柳星更多（余韵更长）
   pending.push({
-    t: 0.13,
-    x: x + (Math.random() - 0.5) * W * 0.30 * spread,
-    y: y - H * 0.08,
-    power: 0.78, ratio: 0.030 * gain,
+    t: 0.15,
+    x: x + (Math.random() - 0.5) * W * 0.34 * spread,
+    y: y + (Math.random() - 0.5) * H * 0.10,
+    power: 0.74, ratio: 0.034 * gain, shell: shell * 0.66, willow: 0.42,
   });
+  // 三段金粉：最慢最散，负责「余韵消散」
   pending.push({
-    t: 0.27,
-    x: x + (Math.random() - 0.5) * W * 0.42 * spread,
-    y: y - H * 0.02,
-    power: 0.60, ratio: 0.022 * gain,
+    t: 0.30,
+    x: x + (Math.random() - 0.5) * W * 0.46 * spread,
+    y: y + (Math.random() - 0.5) * H * 0.14,
+    power: 0.56, ratio: 0.026 * gain, shell: shell * 0.46, willow: 0.55,
   });
-  // 连击 ≥3 起追加第三段「金粉余韵」，把节奏从 0.4s 拉长到 0.6s
+  // 连击 ≥3 起追加第四段，把节奏从 0.45s 拉长到 0.65s
   if (c >= 3) {
     pending.push({
-      t: 0.42,
-      x: x + (Math.random() - 0.5) * W * 0.55,
-      y: y - H * 0.12,
-      power: 0.42, ratio: 0.018 * gain,
+      t: 0.46,
+      x: x + (Math.random() - 0.5) * W * 0.60,
+      y: y + (Math.random() - 0.5) * H * 0.18,
+      power: 0.40, ratio: 0.020 * gain, shell: shell * 0.34, willow: 0.65,
     });
   }
 

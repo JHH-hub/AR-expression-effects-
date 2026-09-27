@@ -148,8 +148,8 @@ export class GLRenderer {
     this.estRain = 0;
     this.estSpark = 0;
 
-    this._burst = { x: 0, y: 0, power: 0, seed: 0, start: 0, count: 0 };
-    this._stream = { x: 0, y: 0, seed: 0, start: 0, count: 0 };
+    this._burst = { x: 0, y: 0, power: 0, seed: 0, start: 0, count: 0, shell: 1, willow: 0.30 };
+    this._stream = { x: 0, y: 0, width: 70, seed: 0, start: 0, count: 0 };
 
     this.contextLost = false;
 
@@ -348,24 +348,42 @@ export class GLRenderer {
   setHead(e) { this.head = e; }
   setRain(t) { this.rainIntensity = Math.max(0, Math.min(1, t)); }
 
-  /** 烟花爆发：从指定点（通常是嘴部）迸发 */
-  burst(x, y, power = 1, ratio = 0.26) {
+  /**
+   * 烟花爆发。
+   *
+   * @param x,y    爆发中心（显示像素）。应为画面上的一个点，不再绑定嘴部 ——
+   *               真实烟花的观感前提是「在空旷处炸开」，从嘴这种局部位置喷出来
+   *               会读成「吐东西」而不是烟花。
+   * @param power  力度倍率
+   * @param ratio  本次占用池子比例
+   * @param shell  球壳初速倍率，决定烟火半径（1 约覆盖半个屏高）
+   * @param willow 垂柳星占比，注入花型异质性
+   */
+  burst(x, y, power = 1, ratio = 0.26, shell = 1, willow = 0.30) {
     const count = Math.max(1, Math.round(this.sparkCap * ratio));
     this._burst.x = x; this._burst.y = y;
     this._burst.power = power;
     this._burst.seed = Math.random() * 1000;
     this._burst.start = this.sparkCursor;
     this._burst.count = count;
+    this._burst.shell = shell;
+    this._burst.willow = willow;
     this.sparkCursor = (this.sparkCursor + count) % this.sparkCap;
     this.estSpark = Math.min(this.sparkCap, this.estSpark + count);
     // 记录本次写入触及的最高槽位（可能环绕，故取整池上界）
     this._bumpSparkHi(this._burst.start, count);
   }
 
-  /** 持续能量流：微笑时从嘴角飘出的金色光点 */
-  stream(x, y, count) {
+  /**
+   * 持续光尘：微笑时缓慢上浮的金色微尘，宽度随笑的程度张开。
+   *
+   * 刻意不做成「定向喷射」—— 旧版给了 60~230 px/s 的初速，视觉上像漏气。
+   * @param width 横向展开宽度（像素），让光尘覆盖面部宽度而不是聚成一点
+   */
+  stream(x, y, count, width = 70) {
     const n = Math.max(0, Math.round(count));
     this._stream.x = x; this._stream.y = y;
+    this._stream.width = width;
     this._stream.seed = Math.random() * 1000;
     this._stream.start = this.sparkCursor;
     this._stream.count = n;
@@ -421,11 +439,11 @@ export class GLRenderer {
     this.estRain = Math.round(this.rainSlots * this.rainIntensity);
     this.estSpark *= Math.pow(0.35, dt);
 
-    // 活跃高水位随时间回落：火花 maxLife 上限约 1.67s，用 2s 兜底，
-    // 之后无新爆发即归零，绘制彻底跳过空闲的火花槽位。
+    // 活跃高水位随时间回落。现在最长寿的粒子是光尘（maxLife 上限 2.30s），
+    // 用 2.8s 兜底，之后无新爆发即归零，绘制彻底跳过空闲槽位。
     if (this.estSpark < 0.5) {
       this._sparkIdle = (this._sparkIdle || 0) + dt;
-      if (this._sparkIdle > 2) this.sparkActiveHi = 0;
+      if (this._sparkIdle > 2.8) this.sparkActiveHi = 0;
     } else {
       this._sparkIdle = 0;
     }
@@ -450,6 +468,9 @@ export class GLRenderer {
     gl.uniform2f(u.uScreen, this.W, this.H);
     gl.uniform1f(u.uDt, dt);
     gl.uniform1f(u.uTime, this.time);
+    // 物理尺度跟着屏幕短边走：花型在不同设备上保持同一视觉比例。
+    // 以 390×844 手机竖屏（短边 390）为基准，此时系数≈1，与标定数值一致。
+    gl.uniform1f(u.uPhysScale, Math.max(Math.min(this.W, this.H), 1) / 390);
 
     const h = this.head;
     gl.uniform4f(u.uHead, h.x, h.y, Math.max(h.rx, 1), Math.max(h.ry, 1));
@@ -460,8 +481,9 @@ export class GLRenderer {
     const b = this._burst;
     gl.uniform4f(u.uBurst, b.x, b.y, b.power, b.seed);
     gl.uniform2i(u.uBurstSlot, b.start, b.count);
+    gl.uniform2f(u.uShell, b.shell, b.willow);
     const st = this._stream;
-    gl.uniform4f(u.uStream, st.x, st.y, 1, st.seed);
+    gl.uniform4f(u.uStream, st.x, st.y, st.width, st.seed);
     gl.uniform2i(u.uStreamSlot, st.start, st.count);
 
     gl.bindVertexArray(this.quadVao);
