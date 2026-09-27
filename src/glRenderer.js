@@ -14,7 +14,7 @@ import {
   SPARK_TRAIL_VS, SPARK_TRAIL_FS,
   RAIN_VS, RAIN_FS,
   BRIGHT_FS, BLUR_FS, COMPOSITE_FS,
-} from './shaders.js';
+} from './shaders.js?v=20260927c';
 
 /* ---------------- 底层小工具 ---------------- */
 
@@ -87,15 +87,18 @@ function makeFbo(gl, textures) {
 
 /* ---------------- 质量档位 ---------------- */
 // texSize² = 粒子容量。rainRatio 决定雨与火花的槽位切分。
+// rainRatio 由 0.075 提到 0.20：雨槽位从约 4900 增到约 13000。
+// 雨的「强」首先是密度，而这部分算力几乎免费 —— 雨是每滴一条线段（2 顶点），
+// 相比火花的点精灵+拖尾，同数量级的开销低得多。
 // beauty：可选美颜强度，**默认全档为 0（关闭）**。
 //   实测：磨皮 + 提亮 + 暖肤 + 增饱和 + 柔光叠加这套组合会把中间调整体抬高约 0.21、
 //   压低对比度，人脸呈「灰蒙发糊」的塑料感；短视频平台的美颜之所以自然，
 //   是因为它基于皮肤分割做了局部处理，而 5-tap 均值磨皮无法区分皮肤与背景，
 //   结果是整幅画面一起被糊。因此默认直通摄像头，需要时再手动开。
 export const QUALITY = [
-  { name: 'LOW',  texSize: 96,  rainRatio: 0.090, dpr: 1.0,  bloom: 1.05, detectEvery: 2, beauty: 0.00 },
-  { name: 'MID',  texSize: 160, rainRatio: 0.080, dpr: 1.25, bloom: 1.15, detectEvery: 1, beauty: 0.00 },
-  { name: 'HIGH', texSize: 256, rainRatio: 0.075, dpr: 1.5,  bloom: 1.25, detectEvery: 1, beauty: 0.00 },
+  { name: 'LOW',  texSize: 96,  rainRatio: 0.200, dpr: 1.0,  bloom: 1.05, detectEvery: 2, beauty: 0.00 },
+  { name: 'MID',  texSize: 160, rainRatio: 0.200, dpr: 1.25, bloom: 1.15, detectEvery: 1, beauty: 0.00 },
+  { name: 'HIGH', texSize: 256, rainRatio: 0.200, dpr: 1.5,  bloom: 1.25, detectEvery: 1, beauty: 0.00 },
 ];
 
 export class GLRenderer {
@@ -632,7 +635,6 @@ export class GLRenderer {
     const h = this.head;
     gl.uniform4f(u.uHead, h.x, h.y, Math.max(h.rx, 1), Math.max(h.ry, 1));
     gl.uniform1f(u.uHeadValid, h.valid ? 1 : 0);
-    gl.uniform1f(u.uRim, mood.rim || 0);
     gl.uniform1f(u.uMoodCool, mood.cool || 0);
     gl.uniform1f(u.uMoodWarm, mood.warm || 0);
     gl.uniform1f(u.uFlash, mood.flash || 0);

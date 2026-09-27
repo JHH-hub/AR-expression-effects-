@@ -6,7 +6,7 @@
  *      运行时只做 drawImage。
  */
 
-import { collideEllipse } from './collision.js';
+import { collideEllipse } from './collision.js?v=20260927c';
 
 const GRAVITY = 780;      // px/s²
 const DRAG = 0.85;        // 空气阻尼系数

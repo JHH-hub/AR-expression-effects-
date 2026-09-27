@@ -181,7 +181,9 @@ export class ExpressionFSM {
   /** 雨强度：smoothstep 让「刚开始笑」到「大笑」的雨量过渡不生硬 */
   get rainIntensity() {
     const c = this.cfg;
-    const t = Math.max(0, Math.min(1, (this.smile - c.smileExit) / (0.62 - c.smileExit)));
+    // 上限从 0.62 收到 0.52：微笑不必到位就能下起像样的雨，
+    // 否则只有「很用力地笑」才有一点细雨，观感上会觉得特效太弱。
+    const t = Math.max(0, Math.min(1, (this.smile - c.smileExit) / (0.52 - c.smileExit)));
     return t * t * (3 - 2 * t);
   }
 

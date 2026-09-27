@@ -7,13 +7,13 @@
  *   视频采样映射严格互为逆运算——否则特效会和人脸错位。
  */
 
-import { FaceTracker } from './faceTracker.js';
-import { ExpressionFSM, State } from './expressionFSM.js';
-import { PerfMonitor } from './perf.js';
-import { fitHeadEllipse, createEllipse } from './collision.js';
-import { GLRenderer, QUALITY } from './glRenderer.js';
-import { LegacyRenderer } from './legacyRenderer.js';
-import { UI } from './ui.js';
+import { FaceTracker } from './faceTracker.js?v=20260927c';
+import { ExpressionFSM, State } from './expressionFSM.js?v=20260927c';
+import { PerfMonitor } from './perf.js?v=20260927c';
+import { fitHeadEllipse, createEllipse } from './collision.js?v=20260927c';
+import { GLRenderer, QUALITY } from './glRenderer.js?v=20260927c';
+import { LegacyRenderer } from './legacyRenderer.js?v=20260927c';
+import { UI } from './ui.js?v=20260927c';
 
 const video = document.getElementById('cam');
 const canvas = document.getElementById('fx');
@@ -42,12 +42,19 @@ let hudAcc = 0;
 const pending = [];
 
 const mood = {
-  cool: 0, warm: 0, flash: 0, rim: 0,
+  cool: 0, warm: 0, flash: 0,
   shockX: 0, shockY: 0, shockR: 0, shockLife: 0,
   bloomBoost: 1,
   shakeX: 0, shakeY: 0,
 };
 let shockT = 999;
+
+/* 雨量包络：上升快、回落慢。
+ * 直接把 fsm.rainIntensity 透传给渲染器有个问题 —— 它跟着瞬时笑意走，
+ * 一笑就有雨、一停就断，观感上"雨很脆"。这里给一个不对称包络：
+ * 起雨 0.18s 半衰（要跟得上表情），收雨 1.35s 半衰（雨幕慢慢收）。
+ */
+const rainEnv = { v: 0 };
 
 /* ---------------- 连击（直播礼物的核心节奏装置） ----------------
  * 直播特效的「排面」来自递进：第 1 发朴素，连击越高越夸张。
@@ -202,7 +209,13 @@ function loop(now) {
   }
 
   renderer.setHead(head);
-  renderer.setRain(fsm.rainIntensity);
+  // 雨量走不对称包络：起雨跟随表情，收雨拖长成"雨渐渐停"。
+  // 目标值再抬一档（×1.15 后截断），保证中等笑意就能撑起满屏雨。
+  const rainTarget = Math.min(1, fsm.rainIntensity * 1.15);
+  // 半衰期 ↔ 时间常数：k = 1 - 0.5^(dt/halfLife)
+  const rainHalf = rainTarget > rainEnv.v ? 0.18 : 1.35;
+  rainEnv.v += (rainTarget - rainEnv.v) * (1 - Math.pow(0.5, dt / rainHalf));
+  renderer.setRain(rainEnv.v);
 
   /* 4) 氛围参数 */
   updateMood(dt, st);
@@ -305,9 +318,9 @@ function updateMood(dt, st) {
     mood.shakeY = 0;
   }
 
-  // 辉光环只在有特效时亮起，中性状态保持干净
-  const targetRim = Math.min(1.25, fsm.rainIntensity * 0.42 + fsm.laugh * 0.95);
-  mood.rim += (targetRim - mood.rim) * kSlow;
+  // 辉光环已移除：椭圆由 478 点包围盒拟合，天生比真实脸大一圈（rx*1.16、ry*1.24），
+  // 沿它描边必然显出"歪"；且亮环会改变脸部观感，与"人保持原样"原则冲突。
+  // 碰撞反馈已由粒子自身表达（雨撞脸转水痕、火花碰椭圆弹开）。
 
   mood.flash *= Math.pow(0.015, dt);      // ~0.2s 内衰减干净
   if (mood.flash < 0.002) mood.flash = 0;

@@ -161,7 +161,10 @@ void main() {
         pos = next;
         vel.y += 120.0 * uDt;   // 轻微加速，避免雨速看起来匀速呆板
       }
-      if (!wanted) life = 0.0;  // 雨量下调时自然收束
+      // 注意：这里**不**因 uRainIntensity 下降而立刻杀死雨滴。
+      // 旧实现在雨量下调时直接 life=0，导致一松口雨就整片瞬间消失，
+      // 完全没有「雨渐渐停」的过程。现在只控制出生数，已存在的雨滴
+      // 自然落出画面，于是停笑后还能看到约一秒的雨尾。
     }
 
     oState0 = vec4(pos, vel);
@@ -501,14 +504,18 @@ void main() {
   float t = clamp(s1.x / max(s1.y, 1e-3), 0.0, 1.0);
   float speed = length(s0.zw);
   vec2 dir = normalize(s0.zw + vec2(0.0, 1e-3));
-  // 拖尾长度与速度成正比：越快的雨拉得越长，天然产生景深分层
-  float len = splash ? (1.4 + 2.6 * t) : (7.0 + speed * 0.014 + s1.w * 10.0);
+  // 拖尾长度与速度成正比：越快的雨拉得越长，天然产生景深分层。
+  // 基础长度上调（7→11）：更长的雨丝才是「下大雨」的直观信号，
+  // 短雨丝即使数量多也像下小雪。
+  float len = splash ? (1.4 + 2.6 * t) : (11.0 + speed * 0.022 + s1.w * 14.0);
   vec2 p = s0.xy - dir * len * aVert.y;
 
   vec2 ndc = (p / uScreen) * 2.0 - 1.0;
   gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
 
-  float depth = 0.22 + s1.w * 0.78;   // 用 seed 当景深：近处更亮，远处隐入背景
+  // 景深：近处更亮更大。抬高低谷（0.22→0.34）并压缩动态范围，
+  // 让远处雨丝也看得见，整片雨才显得密实而不是稀稀拉拉。
+  float depth = 0.34 + s1.w * 0.66;
   vec3 col = rainColor(s1.w);
   if (uHeadValid > 0.5) {
     col *= 1.0 + smoothstep(1.4, 1.02, headDist(s0.xy, uHead)) * 0.5;
@@ -525,7 +532,8 @@ in vec3 vColor;
 in float vAlpha;
 out vec4 oColor;
 void main() {
-  oColor = vec4(vColor * vAlpha * 0.42, 1.0);
+  // 整体亮度由 0.42 提到 0.60：雨是这场互动的主角之一，不能只是背景噪点
+  oColor = vec4(vColor * vAlpha * 0.60, 1.0);
 }`;
 
 /* ============================ 4. 辉光 ============================ */
@@ -578,7 +586,6 @@ uniform float uBloomStrength;
 
 uniform vec4  uHead;
 uniform float uHeadValid;
-uniform float uRim;          // 头部辉光环强度
 uniform float uMoodCool;     // 微笑氛围
 uniform float uMoodWarm;     // 大笑氛围
 uniform float uFlash;        // 爆发瞬间闪光
@@ -620,7 +627,21 @@ vec3 smoothSkin(vec2 uv, vec3 center, float amount) {
 }
 
 void main() {
-  vec2 px = vUv * uScreen;
+  /* 合成阶段的坐标转换（此前这里有个隐蔽的 y 轴翻转 bug，导致脸部错位）。
+   *
+   * 事实链：
+   *   vUv 由全屏三角插值而来（aPos*0.5+0.5），而 NDC 的 y 轴向上 →
+   *   **vUv.y=0 对应屏幕底部、vUv.y=1 对应屏幕顶部**，与 CSS 的 y 方向相反。
+   *   摄像头画面之所以看起来是对的，是因为 uploadVideo 用了
+   *   UNPACK_FLIP_Y_WEBGL=true，由纹理层再翻一次，恰好抵消。
+   *   但头部椭圆 uHead、冲击波 uShock 都是 CSS 坐标（y 向下），
+   *   直接拿 vUv*uScreen 去比对，就会把整个头部判定镜像到屏幕另一侧：
+   *   表现是「脸在画面上方，辉光环却出现在画面下方」，背景分离区域也落在反方向。
+   *
+   * 粒子那边没这个问题，是因为 SPARK_VS / RAIN_VS 在写 gl_Position 时
+   * 显式做了 -ndc.y 的翻转。合成阶段漏了这一步，这里补上。
+   */
+  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uScreen;
 
   /* -- 摄像头层：镜像 + cover，原样直通 -- */
   // 人脸不做任何默认调色。此前的压暗/去饱和/提亮/增饱和/柔光叠加五连，
@@ -644,17 +665,15 @@ void main() {
   camGlow += vec3(0.16, 0.30, 0.52) * topGrad * uMoodCool * 0.42;
   camGlow += vec3(0.42, 0.20, 0.06) * uMoodWarm * 0.26;
 
-  /* -- 头部辉光环：碰撞可见性的主要载体，必须细而亮，宽了会糊成甜甜圈 -- */
-  if (uHeadValid > 0.5) {
-    float d = headDist(px, uHead);
-    float ring = smoothstep(1.14, 1.005, d) * smoothstep(0.955, 1.005, d);
-    vec3 ringCol = mix(vec3(0.45, 0.72, 1.0), vec3(1.0, 0.72, 0.35), uMoodWarm);
-    camGlow += ringCol * ring * uRim * 0.75;
-    // 内侧极淡补光，让人脸从背景里「浮」起来，强度必须很低否则整张脸发白
-    camGlow += ringCol * smoothstep(1.0, 0.6, d) * uRim * 0.035;
-  }
+  /* 头部辉光环已移除。
+   * 原本想用它提示「碰撞体在哪」，但它是个贴着脸的椭圆：
+   *   · 椭圆是用 478 点包围盒拟合的，本就比真实脸宽一点（rx*1.16、ry*1.24），
+   *     于是环永远比脸大一圈，看起来就是「歪的」；
+   *   · 光环叠加在肤色上会明显改变脸部观感，与「人保持原样」的原则冲突；
+   *   · 碰撞其实已经被粒子自身的反弹溅射清楚地表达出来了，不需要额外描边。
+   */
 
-  /* -- 冲击波环：从嘴部扩散，把「大笑」和「爆发」在视觉上绑定 -- */
+  /* -- 冲击波环：从爆点扩散，把「大笑」和「爆发」在视觉上绑定 -- */
   if (uShockLife > 0.0) {
     float d = length(px - uShock.xy);
     float w = 12.0 + uShock.z * 0.05;   // 细环，宽环会糊成一团光斑
@@ -670,10 +689,14 @@ void main() {
    * 这是各类 AR 滤镜的通用做法（如 sachadee 的 face-oval clip）：
    * 不靠"修人"来突出人，而是把背景退后。此前我们把整幅画面一起调色，
    * 人脸的灰蒙来自这里；改成只处理背景后，人保持原样但有立体层次。
+   *
+   * 边界用宽过渡（0.98→1.6）而不是紧贴椭圆：
+   * 椭圆是包围盒拟合的，本身就比脸大一圈，硬边界会把过渡露在脸颊外，
+   * 看起来像一张罩住脸的"面膜"。宽过渡让暗化自然消失在头发与肩膀处。
    */
   float faceMask = 0.0;
   if (uHeadValid > 0.5) {
-    faceMask = 1.0 - smoothstep(0.92, 1.30, headDist(px, uHead));
+    faceMask = 1.0 - smoothstep(0.98, 1.60, headDist(px, uHead));
     float gl2 = dot(cam, vec3(0.2126, 0.7152, 0.0722));
     vec3 muted = mix(cam, vec3(gl2), 0.20) * 0.82;
     cam = mix(muted, cam, faceMask);   // faceMask=1 处严格等于原图

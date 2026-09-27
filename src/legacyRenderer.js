@@ -6,7 +6,7 @@
  * 目标是「功能与交互完整可验收」，画质天花板明显低于 WebGL 路径。
  */
 
-import { SparkPool, RainField } from './particles.js';
+import { SparkPool, RainField } from './particles.js?v=20260927c';
 
 const LEVELS = [
   { name: 'LOW(2D)',  rain: 90,  sparkRatio: 0.28, dpr: 1.0 },
@@ -119,19 +119,8 @@ export class LegacyRenderer {
 
     // 头部辉光环：碰撞可见性
     const h = this.head;
-    if (h.valid && mood.rim > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const warm = mood.warm || 0;
-      ctx.strokeStyle = warm > 0.3
-        ? `rgba(255, 186, 96, ${0.35 * mood.rim})`
-        : `rgba(122, 190, 255, ${0.32 * mood.rim})`;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    // 头部辉光环已移除（与 WebGL 路径一致）：椭圆拟合本就比脸大一圈，
+    // 描边会显出「歪」；碰撞反馈已由粒子的反弹溅射表达。
 
     if (mood.flash > 0.01) {
       ctx.save();
