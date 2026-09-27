@@ -47,6 +47,8 @@ export class LegacyRenderer {
 
   setHead(e) { this.head = e; }
   setRain(t) { this.rainT = t; }
+  /** Canvas2D 无法做磨皮，仅为接口一致而存在 */
+  setBeauty(on) { this.beautyOn = !!on; }
 
   burst(x, y, power = 1) {
     this.sparks.burst(x, y, Math.round(this.sparks.cap * this.quality.sparkRatio * 0.5), power);
@@ -84,12 +86,8 @@ export class LegacyRenderer {
       ctx.scale(-1, 1);
       ctx.drawImage(this.video, (W - dw) / 2 + sx, (H - dh) / 2 + sy, dw, dh);
       ctx.restore();
-      // 直播取向：提亮暖肤，而不是压暗。Canvas2D 无法做磨皮，用暖光叠加代偿
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = 'rgba(38, 26, 18, 0.16)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.restore();
+      // 摄像头层原样直通，不做任何调色（与 WebGL 路径保持一致）：
+      // 特效负责加光，不负责改人。此前叠的暖光会把整幅画面整体提亮而压低对比度。
     } else {
       ctx.fillStyle = '#07070c';
       ctx.fillRect(0, 0, W, H);

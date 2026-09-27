@@ -374,6 +374,13 @@ async function boot() {
 ui.bind({
   onStart: boot,
   onBurst: () => fireFrom(mouth.ok ? mouth.x : W * 0.5, mouth.ok ? mouth.y : H * 0.4),
+  onBeauty: (on) => {
+    // 默认关。开启后给一档温和强度：仅柔化明暗差小的区域（皮肤），
+    // 边缘保护会让眼睛/嘴唇/发丝保持锐利，避免整幅画面一起被糊。
+    mood.beauty = on ? (perf.level === 0 ? 0.25 : 0.42) : 0;
+    renderer.setBeauty(on);
+    ui.toast(on ? '美颜已开启（轻）' : '美颜已关闭 · 摄像头原样');
+  },
   onRecalibrate: () => { fsm.reset(); ui.toast('请保持自然表情 1 秒…'); },
 });
 

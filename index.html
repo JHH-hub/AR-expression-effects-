@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0710" />
 <meta name="description" content="AR 表情互动原型：微笑下雨、大笑烟花，粒子与头部实时物理碰撞。" />
 <title>微笑落雨 · 大笑烟花 — AR Expression Effects</title>
-<link rel="stylesheet" href="./src/styles.css?v=20260926" />
+<link rel="stylesheet" href="./src/styles.css?v=20260927a" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff3d0'/%3E%3Cstop offset='.55' stop-color='%23ffd46b'/%3E%3Cstop offset='1' stop-color='%23ff3e8f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='13' fill='url(%23g)'/%3E%3C/svg%3E" />
 <script type="importmap">
 {
@@ -74,13 +74,14 @@
   <!-- 飘心流：直播间点赞的视觉签名 -->
   <div id="hearts" aria-hidden="true"></div>
 
-  <!-- 性能面板 -->
+  <!-- 性能面板（可切换美颜做对照，默认关闭） -->
   <section id="perf" class="hidden">
     <div class="p-row"><span>FPS</span><b id="pFps">--</b></div>
     <div class="p-row"><span>粒子</span><b id="pCount">0</b></div>
     <div class="p-row"><span>画质</span><b id="pQuality">--</b></div>
     <div class="p-row"><span>推理</span><b id="pInfer">0.0 ms</b></div>
     <div class="p-row p-backend"><span>后端</span><b id="pBackend">-</b></div>
+    <button id="btnBeauty" class="p-toggle" aria-pressed="false">美颜：关</button>
   </section>
 
   <!-- 校准浮层 -->
@@ -118,6 +119,6 @@
   </div>
 </div>
 
-<script type="module" src="./src/main.js?v=20260926"></script>
+<script type="module" src="./src/main.js?v=20260927a"></script>
 </body>
 </html>

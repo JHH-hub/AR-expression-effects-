@@ -6,7 +6,7 @@
  *   2. rain/spark: 粒子绘制到 HDR 场景缓冲（RGBA16F，加性混合）
  *   3. bright    : 亮度提取并降采样 1/4
  *   4. blur x N  : 可分离高斯（横+竖），形成多级辉光
- *   5. composite : 摄像头调色 + 场景 + 辉光 + 头部辉光环 + 冲击波 + 暗角 + filmic tonemap
+ *   5. composite : 摄像头原样 + 背景分离 + 场景 + 辉光 + 头部辉光环 + 冲击波 + 暗角
  *
  * 粒子状态打包在两张浮点纹理：
  *   state0 = (pos.x, pos.y, vel.x, vel.y)
@@ -526,13 +526,6 @@ out vec4 oColor;
 ${PALETTE}
 ${ELLIPSE}
 
-vec3 filmic(vec3 x) {
-  // ACES 近似：高光滚降，避免粒子堆叠处糊成死白，暖金才能保住颜色
-  vec3 a = x * (2.51 * x + 0.03);
-  vec3 b = x * (2.43 * x + 0.59) + 0.14;
-  return clamp(a / b, 0.0, 1.0);
-}
-
 /**
  * 轻量磨皮（direct-light 直播标配的第一层）。
  *
@@ -562,36 +555,36 @@ vec3 smoothSkin(vec2 uv, vec3 center, float amount) {
 void main() {
   vec2 px = vUv * uScreen;
 
-  /* -- 摄像头层：镜像 + cover + 直播级美颜与提亮，人是主角 -- */
+  /* -- 摄像头层：镜像 + cover，原样直通 -- */
+  // 人脸不做任何默认调色。此前的压暗/去饱和/提亮/增饱和/柔光叠加五连，
+  // 实测把中间调整体抬高 0.21 并压低对比度，人脸呈「灰蒙发糊」的塑料感。
+  // 摄像头出什么就是什么，特效负责加光，不负责改人。
   vec2 vuv = (vUv - uVideoOffset + uShake) / uVideoScale;
   vuv.x = 1.0 - vuv.x;
   vuv = clamp(vuv, 0.0, 1.0);
   vec3 cam = texture(uVideo, vuv).rgb;
+
+  // 可选美颜 + 补光，默认关闭（uBeauty = 0 时逐位等于原图）
   cam = smoothSkin(vuv, cam, uBeauty);
+  cam = mix(cam, pow(max(cam, 0.0), vec3(0.94)) * 1.03, uBeauty);
 
-  // 提亮 + 抬中间调（直播补光观感），不再压暗
-  cam = pow(max(cam, 0.0), vec3(0.90)) * 1.06;
-  // 暖肤：给红/黄通道一点偏置，抵消摄像头常见的青绿肤色
-  cam *= vec3(1.045, 1.005, 0.975);
-  // 轻微提饱和，避免高对比色特效把人脸衬成灰的
-  float luma = dot(cam, vec3(0.2126, 0.7152, 0.0722));
-  cam = mix(vec3(luma), cam, 1.16);
-  // 柔光叠加：把亮部再提一档，形成「打了柔光箱」的直播质感
-  cam = mix(cam, 1.0 - (1.0 - cam) * (1.0 - cam), 0.16);
+  /* -- 氛围光与特效光：全部累积到独立层，不污染摄像头像素 -- */
+  // 分开累积的意义：摄像头层保持原样，只有这一层参与辉光与暗角，
+  // 于是「人脸不动、特效发光」两件事互不干扰。
+  vec3 camGlow = vec3(0.0);
 
-  /* -- 氛围光 -- */
   float topGrad = smoothstep(0.85, 0.0, vUv.y);
-  cam += vec3(0.16, 0.30, 0.52) * topGrad * uMoodCool * 0.42;
-  cam += vec3(0.42, 0.20, 0.06) * uMoodWarm * 0.26;
+  camGlow += vec3(0.16, 0.30, 0.52) * topGrad * uMoodCool * 0.42;
+  camGlow += vec3(0.42, 0.20, 0.06) * uMoodWarm * 0.26;
 
   /* -- 头部辉光环：碰撞可见性的主要载体，必须细而亮，宽了会糊成甜甜圈 -- */
   if (uHeadValid > 0.5) {
     float d = headDist(px, uHead);
     float ring = smoothstep(1.14, 1.005, d) * smoothstep(0.955, 1.005, d);
     vec3 ringCol = mix(vec3(0.45, 0.72, 1.0), vec3(1.0, 0.72, 0.35), uMoodWarm);
-    cam += ringCol * ring * uRim * 0.75;
+    camGlow += ringCol * ring * uRim * 0.75;
     // 内侧极淡补光，让人脸从背景里「浮」起来，强度必须很低否则整张脸发白
-    cam += ringCol * smoothstep(1.0, 0.6, d) * uRim * 0.035;
+    camGlow += ringCol * smoothstep(1.0, 0.6, d) * uRim * 0.035;
   }
 
   /* -- 冲击波环：从嘴部扩散，把「大笑」和「爆发」在视觉上绑定 -- */
@@ -599,26 +592,46 @@ void main() {
     float d = length(px - uShock.xy);
     float w = 12.0 + uShock.z * 0.05;   // 细环，宽环会糊成一团光斑
     float ring = exp(-pow((d - uShock.z) / w, 2.0) * 2.4);
-    cam += vec3(1.0, 0.80, 0.45) * ring * uShockLife * 0.62;
+    camGlow += vec3(1.0, 0.80, 0.45) * ring * uShockLife * 0.62;
   }
 
-  /* -- 粒子 + 多级辉光 -- */
+  /* -- 粒子的独立发光层 -- */
   vec3 scene = texture(uScene, vUv).rgb;
+
+  /* -- 背景分离：只压暗/去饱和脸部椭圆之外，人脸像素一个不动 --
+   *
+   * 这是各类 AR 滤镜的通用做法（如 sachadee 的 face-oval clip）：
+   * 不靠"修人"来突出人，而是把背景退后。此前我们把整幅画面一起调色，
+   * 人脸的灰蒙来自这里；改成只处理背景后，人保持原样但有立体层次。
+   */
+  float faceMask = 0.0;
+  if (uHeadValid > 0.5) {
+    faceMask = 1.0 - smoothstep(0.92, 1.30, headDist(px, uHead));
+    float gl2 = dot(cam, vec3(0.2126, 0.7152, 0.0722));
+    vec3 muted = mix(cam, vec3(gl2), 0.20) * 0.82;
+    cam = mix(muted, cam, faceMask);   // faceMask=1 处严格等于原图
+  }
   vec3 bloom = texture(uBloom0, vUv).rgb * 0.62 + texture(uBloom1, vUv).rgb * 0.95;
 
-  vec3 col = cam + scene + bloom * uBloomStrength;
-  col += vec3(1.0, 0.86, 0.60) * uFlash * 0.30;
+  // 发光层单独滚降。此前 filmic 作用在整幅画面上，把中间整体抬 0.13~0.3
+  // （filmic(0.1)=0.126, filmic(0.2)=0.30），暗部被提起 = 灰蒙发糊的主因；
+  // 同时它把烟花峰值压到 0.81，粒子永远到不了白热，看着「不亮」。
+  // 现在：camera 原样，只有光效做高光滚降，且滚降只发生在 1.0 以上。
+  vec3 emissive = scene + bloom * uBloomStrength;
+  emissive += vec3(1.0, 0.86, 0.60) * uFlash * 0.30;
+  emissive = emissive / (1.0 + max(vec3(0.0), emissive - 1.0) * 0.25);
 
-  /* -- 暗角 + 色调 + tonemap -- */
-  // 暗角刻意做浅：直播间要「亮堂」，重暗角会让人脸看着脏
+  // 暗角：真实镜头本来就有，幅度控制在边缘 -15%（0.30*0.5），属自然范围。
+  // 关键是它只乘摄像头层，不参与发光层 —— 旧实现给整幅画面做暗角后又被
+  // ACES 抬亮，等于「先压暗再提亮」，暗部细节被碾平，这才有发灰感。
   vec2 q = vUv - 0.5;
-  col *= 1.0 - dot(q, q) * 0.34;
-  col = filmic(col * 1.02);
-  col = mix(col, col * vec3(1.03, 0.99, 1.02), 0.5);  // 极轻的品红倾向
+  float vig = 1.0 - dot(q, q) * 0.30;
+
+  vec3 col = cam * vig + camGlow + emissive;
 
   // 弱噪点：抵消暗部 8bit 色带，顺带去掉「CG 塑料感」
   float n = fract(sin(dot(px, vec2(12.9898, 78.233))) * 43758.5453);
-  col += (n - 0.5) * 0.016;
+  col += (n - 0.5) * 0.014;
 
-  oColor = vec4(col, 1.0);
+  oColor = vec4(min(col, vec3(1.0)), 1.0);
 }`;

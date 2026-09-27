@@ -246,6 +246,21 @@ html, body {
 }
 .p-backend b { color: var(--gold); font-size: 10px; }
 
+#perf .p-toggle {
+  margin-top: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit; font-size: 11px;
+  color: var(--dim);
+  border-radius: 9px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: color .16s, border-color .16s;
+}
+#perf .p-toggle:hover { color: var(--fg); border-color: var(--stroke-hot); }
+#perf .p-toggle[aria-pressed="true"] { color: var(--gold); border-color: var(--stroke-hot); }
+
 /* ============================ 校准浮层 ============================ */
 
 #calib {

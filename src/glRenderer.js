@@ -87,11 +87,15 @@ function makeFbo(gl, textures) {
 
 /* ---------------- 质量档位 ---------------- */
 // texSize² = 粒子容量。rainRatio 决定雨与火花的槽位切分。
-// beauty：磨皮强度。低端机降到 0 可省下 4 次纹理采样 / 像素。
+// beauty：可选美颜强度，**默认全档为 0（关闭）**。
+//   实测：磨皮 + 提亮 + 暖肤 + 增饱和 + 柔光叠加这套组合会把中间调整体抬高约 0.21、
+//   压低对比度，人脸呈「灰蒙发糊」的塑料感；短视频平台的美颜之所以自然，
+//   是因为它基于皮肤分割做了局部处理，而 5-tap 均值磨皮无法区分皮肤与背景，
+//   结果是整幅画面一起被糊。因此默认直通摄像头，需要时再手动开。
 export const QUALITY = [
   { name: 'LOW',  texSize: 96,  rainRatio: 0.090, dpr: 1.0,  bloom: 1.05, detectEvery: 2, beauty: 0.00 },
-  { name: 'MID',  texSize: 160, rainRatio: 0.080, dpr: 1.25, bloom: 1.15, detectEvery: 1, beauty: 0.55 },
-  { name: 'HIGH', texSize: 256, rainRatio: 0.075, dpr: 1.5,  bloom: 1.25, detectEvery: 1, beauty: 0.78 },
+  { name: 'MID',  texSize: 160, rainRatio: 0.080, dpr: 1.25, bloom: 1.15, detectEvery: 1, beauty: 0.00 },
+  { name: 'HIGH', texSize: 256, rainRatio: 0.075, dpr: 1.5,  bloom: 1.25, detectEvery: 1, beauty: 0.00 },
 ];
 
 export class GLRenderer {
@@ -139,6 +143,8 @@ export class GLRenderer {
 
     this.head = { x: 0, y: 0, rx: 0, ry: 0, valid: false };
     this.rainIntensity = 0;
+    // 美颜默认关闭。LOW 档没有余量开，MID/HIGH 开了也只在明暗差小的区域生效。
+    this.beautyOn = false;
     this.estRain = 0;
     this.estSpark = 0;
 
@@ -213,6 +219,9 @@ export class GLRenderer {
       new Uint8Array([10, 10, 16, 255]));
     this.videoReady = false;
   }
+
+  /** 切换美颜（默认关）。开启后由 main.js 每帧下传强度，见 QUALITY 注释。 */
+  setBeauty(on) { this.beautyOn = !!on; }
 
   /** 重建粒子状态纹理与索引缓冲（质量切换时调用） */
   setQuality(index) {
@@ -595,7 +604,7 @@ export class GLRenderer {
     gl.uniform1f(u.uBloomStrength, this.quality.bloom * (mood.bloomBoost || 1));
     // 震动在 uv 空间做偏移：不改 canvas 尺寸也不触发 layout，零重排开销
     gl.uniform2f(u.uShake, (mood.shakeX || 0) / this.W, (mood.shakeY || 0) / this.H);
-    gl.uniform1f(u.uBeauty, this.quality.beauty);
+    gl.uniform1f(u.uBeauty, this.beautyOn ? (mood.beauty || 0) : 0);
     gl.uniform2f(u.uTexel, 1 / vw, 1 / vh);
 
     const h = this.head;

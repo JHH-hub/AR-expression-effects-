@@ -41,6 +41,7 @@ export class UI {
       gift: $('gift'),
       giftCombo: $('giftCombo'),
       hearts: $('hearts'),
+      btnBeauty: $('btnBeauty'),
     };
     this._lastState = -1;
     this._toastTimer = 0;
@@ -227,6 +228,14 @@ export class UI {
       this.el.btnPerf.addEventListener('click', (e) => {
         const hidden = this.el.perf.classList.toggle('hidden');
         e.currentTarget.setAttribute('aria-pressed', String(!hidden));
+      });
+    }
+    if (this.el.btnBeauty) {
+      this.el.btnBeauty.addEventListener('click', (e) => {
+        const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+        e.currentTarget.setAttribute('aria-pressed', String(on));
+        e.currentTarget.textContent = on ? '美颜：开' : '美颜：关';
+        if (handlers.onBeauty) handlers.onBeauty(on);
       });
     }
   }
