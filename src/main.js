@@ -7,15 +7,15 @@
  *   视频采样映射严格互为逆运算——否则特效会和人脸错位。
  */
 
-import { FaceTracker } from './faceTracker.js?v=20261008a';
-import { ExpressionFSM, State } from './expressionFSM.js?v=20261008a';
-import { PerfMonitor } from './perf.js?v=20261008a';
-import { fitHeadEllipse, createEllipse } from './collision.js?v=20261008a';
-import { GLRenderer, QUALITY } from './glRenderer.js?v=20261008a';
-import { LegacyRenderer } from './legacyRenderer.js?v=20261008a';
-import { UI } from './ui.js?v=20261008a';
-import { createRenderer } from './rendererFactory.js?v=20261008a';
-import { ExpressionInput } from './expressionInput.js?v=20261008a';
+import { FaceTracker } from './faceTracker.js?v=20261008b';
+import { ExpressionFSM, State } from './expressionFSM.js?v=20261008b';
+import { PerfMonitor } from './perf.js?v=20261008b';
+import { fitHeadEllipse, createEllipse } from './collision.js?v=20261008b';
+import { GLRenderer, QUALITY } from './glRenderer.js?v=20261008b';
+import { LegacyRenderer } from './legacyRenderer.js?v=20261008b';
+import { UI } from './ui.js?v=20261008b';
+import { createRenderer } from './rendererFactory.js?v=20261008b';
+import { ExpressionInput } from './expressionInput.js?v=20261008b';
 
 const video = document.getElementById('cam');
 let canvas = document.getElementById('fx');
@@ -52,10 +52,10 @@ const mood = {
 };
 let shockT = 999;
 
-/* 雨量包络：上升快、回落慢。
+/* 雨量包络：起雨跟随表情，收雨保留短暂过渡。
  * 直接把 fsm.rainIntensity 透传给渲染器有个问题 —— 它跟着瞬时笑意走，
  * 一笑就有雨、一停就断，观感上"雨很脆"。这里给一个不对称包络：
- * 起雨 0.18s 半衰（要跟得上表情），收雨 1.35s 半衰（雨幕慢慢收）。
+ * 起雨 0.18s 半衰，收雨 0.32s 半衰，避免停止微笑后仍持续补充雨滴。
  */
 const rainEnv = { v: 0 };
 
@@ -221,11 +221,11 @@ function loop(now) {
   }
 
   renderer.setHead(head);
-  // 雨量走不对称包络：起雨跟随表情，收雨拖长成"雨渐渐停"。
+  // 雨量走不对称包络：起雨跟随表情，收雨用短过渡。
   // 目标值再抬一档（×1.15 后截断），保证中等笑意就能撑起满屏雨。
   const rainTarget = expressionInput.tracking ? Math.min(1, fsm.rainIntensity * 1.15) : 0;
   // 半衰期 ↔ 时间常数：k = 1 - 0.5^(dt/halfLife)
-  const rainHalf = rainTarget > rainEnv.v ? 0.18 : 1.35;
+  const rainHalf = rainTarget > rainEnv.v ? 0.18 : 0.32;
   rainEnv.v += (rainTarget - rainEnv.v) * (1 - Math.pow(0.5, dt / rainHalf));
   renderer.setRain(rainEnv.v);
 
@@ -467,7 +467,7 @@ resize();
 
 // 调试钩子：便于真机排查与自动化验证，不带来运行时开销
 window.__ar = {
-  version: '20261008a',
+  version: '20261008b',
   get renderer() { return renderer; },
   get head() { return head; },
   get backend() { return backend; },

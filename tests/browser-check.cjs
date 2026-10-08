@@ -16,7 +16,7 @@ const base=process.env.TEST_BASE || 'http://127.0.0.1:8089';
   if(selector==='#fallback' && !results.checks.at(-1).includes('Canvas2D'))throw Error('Fallback backend not confirmed');
  }
  results.gpuCollision=await page.evaluate(async()=>{
-  const {GLRenderer}=await import('/src/glRenderer.js?v=20261008a');
+  const {GLRenderer}=await import('/src/glRenderer.js?v=20261008b');
   const c=document.createElement('canvas'),r=new GLRenderer(c);r.setQuality(0);r.resize(390,540);
   const gl=r.gl, tests=[];
   for(const moving of [false,true]){

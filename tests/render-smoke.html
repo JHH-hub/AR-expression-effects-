@@ -4,9 +4,9 @@
 <button id="gpu">检查 WebGL2</button><button id="fallback">检查失败后 Canvas2D 降级</button>
 <pre id="result">待运行</pre><canvas id="test"></canvas>
 <script type="module">
-import {GLRenderer} from '../src/glRenderer.js?v=20261008a';
-import {LegacyRenderer} from '../src/legacyRenderer.js?v=20261008a';
-import {createRenderer} from '../src/rendererFactory.js?v=20261008a';
+import {GLRenderer} from '../src/glRenderer.js?v=20261008b';
+import {LegacyRenderer} from '../src/legacyRenderer.js?v=20261008b';
+import {createRenderer} from '../src/rendererFactory.js?v=20261008b';
 let active, frame;
 function run(fail) {
   document.querySelector('#result').textContent='RUNNING';

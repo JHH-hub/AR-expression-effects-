@@ -38,6 +38,24 @@ for (const hz of [30, 60]) {
     assert.equal(sample(f, { ...neutral, smile: 0.65, jaw: 0.9 }, 0.5, hz), 0);
     assert.equal(f.calibrating, true);
   });
+  check(`moderate open-mouth smile triggers without exaggerated jaw (${hz}Hz)`, () => {
+    const f = calibrated(hz);
+    assert.ok(sample(f, { ...neutral, smile: 0.5, jaw: 0.285, squint: 0.1 }, 1, hz) >= 1);
+    assert.equal(f.state, State.LAUGH);
+  });
+  check(`weak mouth smile with speech-like jaw changes stays below laugh (${hz}Hz)`, () => {
+    const f = calibrated(hz);
+    for (let i = 0; i < hz * 2; i++) {
+      assert.equal(f.update({ ...neutral, smile: 0.16, jaw: i % 8 < 4 ? 0.8 : 0.1, squint: 0.1 }, 1 / hz).burst, false);
+    }
+    assert.notEqual(f.state, State.LAUGH);
+  });
+  check(`one short jaw spike during a smile does not fire (${hz}Hz)`, () => {
+    const f = calibrated(hz);
+    sample(f, { ...neutral, smile: 0.5 }, 0.5, hz);
+    assert.equal(f.update({ ...neutral, smile: 0.5, jaw: 0.8 }, 1 / hz).burst, false);
+    assert.equal(sample(f, { ...neutral, smile: 0.5 }, 0.5, hz), 0);
+  });
 }
 function canvasMock() {
   return { context: null, cloned: null, replaced: null,

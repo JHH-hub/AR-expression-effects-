@@ -6,7 +6,7 @@
  * 目标是「功能与交互完整可验收」，画质天花板明显低于 WebGL 路径。
  */
 
-import { SparkPool, RainField } from './particles.js?v=20261008a';
+import { SparkPool, RainField } from './particles.js?v=20261008b';
 
 const LEVELS = [
   { name: 'LOW(2D)',  rain: 90,  sparkRatio: 0.28, dpr: 1.0 },

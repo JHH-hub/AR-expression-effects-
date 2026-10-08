@@ -4,7 +4,7 @@
 
 - 在线体验：https://facefx.pxlsan.cn/
 - 源码：https://github.com/JHH-hub/AR-expression-effects-
-- 代码版本标记：`20261008a`，控制台 `window.__ar.version` 可查看。
+- 代码版本标记：`20261008b`，控制台 `window.__ar.version` 可查看。
 - Part 1 方案：`docs/part1-pipeline.md`；JSON 契约：`docs/generator.schema.json`。
 - Part 2 说明及复盘：`docs/part2-demo.md`。
 - 验证结果与待测项：`docs/verification.md`。

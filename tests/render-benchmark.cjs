@@ -6,7 +6,7 @@ const fs=require('node:fs');
  page.on('pageerror',e=>console.error('PAGE ERROR',String(e)));
  await page.goto('http://127.0.0.1:8089/tests/render-smoke.html');
  const result=await page.evaluate(async()=>{
-  const {GLRenderer}=await import('/src/glRenderer.js?v=20261008a');
+  const {GLRenderer}=await import('/src/glRenderer.js?v=20261008b');
   const canvas=document.querySelector('canvas'),r=new GLRenderer(canvas);
   r.setQuality(2);r.resize(390,540);r.setRain(.8);
   const gl=r.gl,info=gl.getExtension('WEBGL_debug_renderer_info');

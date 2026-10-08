@@ -14,7 +14,7 @@ import {
   SPARK_TRAIL_VS, SPARK_TRAIL_FS,
   RAIN_VS, RAIN_FS,
   BRIGHT_FS, BLUR_FS, COMPOSITE_FS,
-} from './shaders.js?v=20261008a';
+} from './shaders.js?v=20261008b';
 
 /* ---------------- 底层小工具 ---------------- */
 

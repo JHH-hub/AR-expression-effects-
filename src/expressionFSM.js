@@ -18,7 +18,7 @@ const DEFAULTS = {
   // 阈值作用于「归一化后」的值，因此可以调得比固定阈值方案更灵敏
   smileEnter: 0.20,
   smileExit: 0.11,
-  laughEnter: 0.30,
+  laughEnter: 0.26, // 真人反馈大笑偏难触发；保留嘴角门控与连续帧确认
   laughExit: 0.17,
   enterFrames: 2,
   exitFrames: 9,
