@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-08T03:40:21.683Z",
+  "base": "https://facefx.pxlsan.cn",
+  "browser": "154.0.4258.62",
+  "camera": "synthetic device, no human",
+  "checks": [
+    "PASS | WebGL2 · GPU 粒子 | 90 synthetic frames | GL error 0 | elapsed 555 ms",
+    "PASS | Canvas2D · 降级模式 | 90 synthetic frames | GL error 0 | elapsed 556 ms"
+  ],
+  "gpuCollision": [
+    {
+      "movingHead": false,
+      "state": [
+        87.875,
+        294.5,
+        -1905,
+        113.3125
+      ],
+      "glError": 0
+    },
+    {
+      "movingHead": true,
+      "state": [
+        319.25,
+        292.5,
+        2734,
+        57.5625
+      ],
+      "glError": 0
+    }
+  ],
+  "startupMs": 2117,
+  "cameraModel": {
+    "backend": "WebGL2 · GPU 粒子",
+    "delegate": "GPU",
+    "tracks": [
+      {
+        "state": "live",
+        "settings": {
+          "aspectRatio": 1.7777777777777777,
+          "exposureMode": "manual",
+          "exposureTime": 50,
+          "focusDistance": 50,
+          "focusMode": "manual",
+          "frameRate": 20,
+          "height": 720,
+          "resizeMode": "none",
+          "width": 1280
+        }
+      }
+    ],
+    "calibrating": true
+  },
+  "errors": [],
+  "rendererBenchmark": {
+    "scope": "Headless Edge renderer-only; synthetic moving head; no camera/inference; not human/device acceptance",
+    "viewport": "390x540 CSS px",
+    "quality": "HIGH",
+    "capacity": 65536,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "durationMs": 180004.59999990463,
+    "frames": 29678,
+    "averageFps": 164.87356434233195,
+    "p50FrameMs": 6.099999999991269,
+    "p95FrameMs": 6.2000000000116415,
+    "p99FrameMs": 6.300000000017462,
+    "glError": 0,
+    "browser": "154.0.4258.62",
+    "date": "2026-10-08T03:43:06.007Z"
+  }
+}

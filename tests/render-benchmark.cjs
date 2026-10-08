@@ -3,6 +3,7 @@ const fs=require('node:fs');
 (async()=>{
  const browser=await chromium.launch({channel:'msedge',headless:true});
  const page=await browser.newPage({viewport:{width:1280,height:900}});
+ page.on('pageerror',e=>console.error('PAGE ERROR',String(e)));
  await page.goto('http://127.0.0.1:8089/tests/render-smoke.html');
  const result=await page.evaluate(async()=>{
   const {GLRenderer}=await import('/src/glRenderer.js?v=20261008a');
@@ -13,14 +14,17 @@ const fs=require('node:fs');
   const h={x:195,y:290,rx:70,ry:90,valid:true};
   const mood={cool:.4,warm:.3,flash:0,shockX:0,shockY:0,shockR:0,shockLife:0,bloomBoost:1,shakeX:0,shakeY:0,beauty:0};let start=performance.now(),last=start,nextBurst=start;
   const samples=[];let frames=0;
-  await new Promise(resolve=>{
+  await new Promise((resolve,reject)=>{
+   const deadline=setTimeout(()=>reject(Error('Renderer benchmark exceeded four-minute deadline')),240000);
    const loop=now=>{
+    try {
     const elapsed=(now-last)/1000;last=now;if(elapsed>0 && now-start>5000)samples.push(elapsed*1000);
     h.prevX=h.x;h.prevY=h.y;h.prevRx=h.rx;h.prevRy=h.ry;h.prevValid=true;
     h.x=195+Math.sin(now/800)*70;r.setHead(h);
     if(now>=nextBurst){r.burst(195,100,1,.08,.8,.3);nextBurst=now+520;}
     r.render(Math.min(elapsed,.05),mood);frames++;
-    if(now-start>=180000)resolve();else requestAnimationFrame(loop);
+    if(now-start>=180000){clearTimeout(deadline);resolve();}else requestAnimationFrame(loop);
+    }catch(e){clearTimeout(deadline);reject(e);}
    };requestAnimationFrame(loop);
   });
   const total=performance.now()-start;samples.sort((a,b)=>a-b);
