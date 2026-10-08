@@ -75,3 +75,31 @@ export function collideEllipse(e, px, py, vx, vy, restitution, out) {
   out.py = e.y + dy * scale * 1.01;
   return true;
 }
+
+/** Swept point vs moving ellipse. Radius changes use a normalized linear path.
+ * New particles born inside can leave freely; exterior crossings reflect in
+ * the moving boundary's frame. No per-particle allocations.
+ */
+export function sweepEllipse(e, px, py, nx, ny, vx, vy, dt, restitution, out) {
+  if (!e.valid || e.rx <= 0 || e.ry <= 0 || dt <= 0) return false;
+  const hx = e.prevValid ? e.prevX : e.x, hy = e.prevValid ? e.prevY : e.y;
+  const rx = e.prevValid ? e.prevRx : e.rx, ry = e.prevValid ? e.prevRy : e.ry;
+  const ax = (px-hx)/rx, ay = (py-hy)/ry;
+  const bx = (nx-e.x)/e.rx-ax, by = (ny-e.y)/e.ry-ay;
+  const c = ax*ax+ay*ay-1, a = bx*bx+by*by, b = ax*bx+ay*by;
+  const disc = b*b-a*c;
+  if (c < 0 || a < 1e-10 || b >= 0 || disc < 0) return false;
+  const t = (-b-Math.sqrt(disc))/a;
+  if (t < 0 || t > 1) return false;
+  const qx = ax+bx*t, qy = ay+by*t;
+  let ux=qx/e.rx, uy=qy/e.ry; const len=Math.hypot(ux,uy);
+  if (len < 1e-10) return false;
+  ux/=len;uy/=len;
+  const hvx=(e.x-hx+qx*(e.rx-rx))/dt, hvy=(e.y-hy+qy*(e.ry-ry))/dt;
+  let rvx=vx-hvx, rvy=vy-hvy; const vn=rvx*ux+rvy*uy;
+  if (vn < 0) {rvx-=(1+restitution)*vn*ux;rvy-=(1+restitution)*vn*uy;}
+  out.x=rvx+hvx;out.y=rvy+hvy;
+  out.px=e.x+qx*e.rx*1.01+rvx*dt*(1-t);
+  out.py=e.y+qy*e.ry*1.01+rvy*dt*(1-t);
+  return true;
+}

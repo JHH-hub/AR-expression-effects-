@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gift concept output v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "asset_id",
+        "spec_version",
+        "attempt",
+        "tool_call"
+      ],
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spec_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "tool_call": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "arguments"
+          ],
+          "properties": {
+            "name": {
+              "const": "gift.build_from_template"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "template_id",
+                "motif_ids",
+                "palette",
+                "material",
+                "motion"
+              ],
+              "properties": {
+                "template_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "motif_ids": {
+                  "type": "array",
+                  "maxItems": 3,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "palette": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
+                  }
+                },
+                "material": {
+                  "enum": [
+                    "matte",
+                    "metal",
+                    "glass"
+                  ]
+                },
+                "motion": {
+                  "enum": [
+                    "float",
+                    "rotate",
+                    "pulse"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "asset_id",
+        "spec_version",
+        "attempt",
+        "reason_code",
+        "evidence",
+        "next_action"
+      ],
+      "properties": {
+        "status": {
+          "const": "RETRY"
+        },
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spec_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "reason_code": {
+          "enum": [
+            "RELIGIOUS_PROHIBITED",
+            "UNKNOWN_SYMBOL",
+            "UNSATISFIABLE_SPEC"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "next_action": {
+          "const": "USE_APPROVED_NEUTRAL_TEMPLATE"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "asset_id",
+        "spec_version",
+        "attempt",
+        "reason_code",
+        "evidence"
+      ],
+      "properties": {
+        "status": {
+          "const": "ESCALATE"
+        },
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spec_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "reason_code": {
+          "enum": [
+            "RELIGIOUS_PROHIBITED",
+            "UNKNOWN_SYMBOL",
+            "UNSATISFIABLE_SPEC",
+            "BUDGET_EXHAUSTED"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    }
+  ]
+}

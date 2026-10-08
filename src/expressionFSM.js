@@ -5,7 +5,7 @@
  * 有人自然状态 mouthSmile 就有 0.22，有人全力笑也只到 0.45。固定阈值必然两头不讨好。
  *
  * 解法是个人化基线校准：
- *   1. 启动时用 1.2s 采集该用户的中性基线；
+ *   1. 启动时用 0.9s 采集该用户的中性基线；
  *   2. 之后所有判定都在「相对基线的剩余空间」里归一化：n = (raw - base) / (1 - base)；
  *   3. 在 NEUTRAL 状态下持续缓慢追踪基线，应对光线变化与姿态漂移。
  *
@@ -75,6 +75,10 @@ export class ExpressionFSM {
     this.state = State.NEUTRAL;
     this.smile = 0;
     this.laugh = 0;
+    this._enterCount = 0;
+    this._exitCount = 0;
+    this._sinceBurst = 9;
+    this._sustain = 0;
   }
 
   /**
@@ -85,6 +89,9 @@ export class ExpressionFSM {
     const c = this.cfg;
 
     if (!s || !s.found) {
+      this._enterCount = 0;
+      this._exitCount = 0;
+      this._sustain = 0;
       // 丢脸时平滑回落，而不是瞬间断掉特效
       const k = 1 - Math.pow(0.5, dt / 0.35);
       this.smile += (0 - this.smile) * k;
@@ -106,12 +113,13 @@ export class ExpressionFSM {
     }
 
     /* ---- 归一化 ---- */
-    // Duchenne 加权：嘴角上扬为主，眼周收缩为辅（真笑必然带眼周动作，
-    // 且大笑张嘴时 mouthSmile 会被拉低，squint 正好补上这块证据）；
-    // 撅嘴/漏斗嘴则扣分，排除说话与嘟嘴。
+    // 嘴角上扬是必要证据。眼周收缩只能增强已有笑意，不能独立触发；
+    // 否则「眯眼 + 张嘴」也会被识别为大笑。阈值仍需真人验证。
+    const mouthN = this._baseSmile.norm(s.smile);
+    const mouthGate = clamp01((mouthN - 0.08) / 0.16);
     const smileN = clamp01(
-      this._baseSmile.norm(s.smile) * 0.78 +
-      clamp01(s.squint) * 0.35 -
+      mouthN * 0.78 +
+      clamp01(s.squint) * 0.35 * mouthGate -
       clamp01(s.pucker) * 0.35
     );
     const jawN = this._baseJaw.norm(s.jaw);
@@ -122,7 +130,7 @@ export class ExpressionFSM {
     // 这里改成门控：没有笑意证据时，张嘴对大笑的贡献严格为 0。
     const gateRaw = clamp01((smileN - 0.08) / 0.24);
     const gate = gateRaw * gateRaw * (3 - 2 * gateRaw);  // smoothstep，避免门限处跳变
-    const laughN = clamp01(jawN * gate);
+    const laughN = clamp01(jawN * gate * mouthGate);
 
     const k = 1 - Math.pow(1 - c.smoothing, Math.max(dt, 1e-3) * 60); // 帧率无关的 EMA
     this.smile += (smileN - this.smile) * k;

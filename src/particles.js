@@ -6,7 +6,7 @@
  *      运行时只做 drawImage。
  */
 
-import { collideEllipse } from './collision.js?v=20260927c';
+import { collideEllipse, sweepEllipse } from './collision.js?v=20261008a';
 
 const GRAVITY = 780;      // px/s²
 const DRAG = 0.85;        // 空气阻尼系数
@@ -109,7 +109,7 @@ export class SparkPool {
       this.x[i] += vx * dt;
       this.y[i] += vy * dt;
 
-      if (collideEllipse(ellipse, this.x[i], this.y[i], vx, vy, RESTITUTION, tmp)) {
+      if (sweepEllipse(ellipse, this.px[i], this.py[i], this.x[i], this.y[i], vx, vy, dt, RESTITUTION, tmp)) {
         vx = tmp.x; vy = tmp.y;
         this.x[i] = tmp.px; this.y[i] = tmp.py;
         if (onHit) onHit(this.x[i], this.y[i], this.hue[i]);

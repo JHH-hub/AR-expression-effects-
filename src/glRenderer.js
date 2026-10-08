@@ -14,7 +14,7 @@ import {
   SPARK_TRAIL_VS, SPARK_TRAIL_FS,
   RAIN_VS, RAIN_FS,
   BRIGHT_FS, BLUR_FS, COMPOSITE_FS,
-} from './shaders.js?v=20260927c';
+} from './shaders.js?v=20261008a';
 
 /* ---------------- 底层小工具 ---------------- */
 
@@ -178,9 +178,21 @@ export class GLRenderer {
     canvas.addEventListener('webglcontextlost', this._onLost, false);
     canvas.addEventListener('webglcontextrestored', this._onRestored, false);
 
-    this._buildPrograms();
-    this._buildQuad();
-    this._buildVideoTex();
+    try {
+      this._buildPrograms();
+      this._buildQuad();
+      this._buildVideoTex();
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
+  }
+
+  dispose() {
+    this.canvas.removeEventListener('webglcontextlost', this._onLost);
+    this.canvas.removeEventListener('webglcontextrestored', this._onRestored);
+    this.contextLost = true;
+    this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 
   /* ---------------- 构建 ---------------- */
@@ -477,6 +489,8 @@ export class GLRenderer {
 
     const h = this.head;
     gl.uniform4f(u.uHead, h.x, h.y, Math.max(h.rx, 1), Math.max(h.ry, 1));
+    gl.uniform4f(u.uHeadPrev, h.prevValid ? h.prevX : h.x, h.prevValid ? h.prevY : h.y,
+      Math.max(h.prevValid ? h.prevRx : h.rx, 1), Math.max(h.prevValid ? h.prevRy : h.ry, 1));
     gl.uniform1f(u.uHeadValid, h.valid ? 1 : 0);
     gl.uniform1i(u.uRainSlots, this.rainSlots);
     gl.uniform1f(u.uRainIntensity, this.rainIntensity);

@@ -7,3 +7,5 @@ Thumbs.db
 .idea/
 .box-agent/
 .deploy-state.json
+tmp/
+__pycache__/

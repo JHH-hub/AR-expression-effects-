@@ -73,6 +73,7 @@ uniform float uDt;
 uniform float uTime;
 
 uniform vec4  uHead;        // x, y, rx, ry (显示像素)
+uniform vec4  uHeadPrev;
 uniform float uHeadValid;
 
 uniform int   uRainSlots;
@@ -273,26 +274,29 @@ void main() {
   vel *= damp;
   vec2 next = pos + vel * uDt;
 
-  // 与头部弹性碰撞。
-  //
-  // 判据是**边界穿越**（上一帧在椭圆外、这一帧在椭圆内），而不是「当前在椭圆内」，
-  // 也不是「速度朝内」。原因：发射源位于头部碰撞体内部且偏离中心，
-  //   · 用「在内部就反弹」：烟花出生即被弹到边缘，堆成一圈光球；
-  //   · 用「速度朝内就反弹」：嘴在中心下方，向上喷出的粒子在下半部的法线朝下，
-  //     会被误判成朝内而全部弹回，于是堆成一个「碗」。
-  // 穿越检测让内部出生的粒子自由掠过脸部飞出，只有从外部落回时才真正撞击反弹。
+  // Sweep the whole relative path, including head motion. This also catches
+  // fast particles whose start AND end lie outside the head. Interior-born
+  // light dust exits freely. Changing radii use a normalized linear approximation.
   if (uHeadValid > 0.5) {
-    vec2 inv = 1.0 / max(uHead.zw, vec2(1.0));
-    vec2 qPrev = (pos - uHead.xy) * inv;
-    vec2 qNext = (next - uHead.xy) * inv;
-    if (dot(qNext, qNext) < 1.0 && dot(qPrev, qPrev) >= 1.0) {
-      vec2 d = next - uHead.xy;
-      vec2 n = normalize(qNext * inv);
-      vel = reflect(vel, n) * BOUNCE;
-      float k = 1.0 / max(length(qNext), 1e-3);
-      next = uHead.xy + d * k * 1.01;
-      life = min(life, 0.42);   // 撞击后迅速熄灭，形成「溅开」而非「绕圈」
-      hue = min(hue + 0.18, 1.0);
+    vec2 radii = max(uHead.zw, vec2(1.0));
+    vec2 prevRadii = max(uHeadPrev.zw, vec2(1.0));
+    vec2 q0 = (pos-uHeadPrev.xy)/prevRadii;
+    vec2 delta = (next-uHead.xy)/radii-q0;
+    float a=dot(delta,delta), b=dot(q0,delta), c=dot(q0,q0)-1.0;
+    float disc=b*b-a*c;
+    if (c>=0.0 && a>1e-10 && b<0.0 && disc>=0.0) {
+      float t=(-b-sqrt(disc))/a;
+      if (t>=0.0 && t<=1.0) {
+        vec2 q=q0+delta*t;
+        vec2 n=normalize(q/radii);
+        vec2 boundaryV=(uHead.xy-uHeadPrev.xy+q*(radii-prevRadii))/max(uDt,0.0001);
+        vec2 relativeV=vel-boundaryV;
+        relativeV-=(1.0+BOUNCE)*min(dot(relativeV,n),0.0)*n;
+        vel=relativeV+boundaryV;
+        next=uHead.xy+q*radii*1.01+relativeV*uDt*(1.0-t);
+        life=min(life,0.42);
+        hue=min(hue+0.18,1.0);
+      }
     }
   }
 

@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>渲染回归检查</title>
+<style>body{font:16px system-ui;background:#172033;color:white;margin:24px}canvas{width:390px;height:540px;border:1px solid #64748b}button{padding:12px;margin:8px}pre{white-space:pre-wrap}</style>
+<h1>无摄像头渲染回归检查</h1><p>合成碰撞体及粒子，仅验证浏览器渲染，不验证真人识别。</p>
+<button id="gpu">检查 WebGL2</button><button id="fallback">检查失败后 Canvas2D 降级</button>
+<pre id="result">待运行</pre><canvas id="test"></canvas>
+<script type="module">
+import {GLRenderer} from '../src/glRenderer.js?v=20261008a';
+import {LegacyRenderer} from '../src/legacyRenderer.js?v=20261008a';
+import {createRenderer} from '../src/rendererFactory.js?v=20261008a';
+let active, frame;
+function run(fail) {
+  document.querySelector('#result').textContent='RUNNING';
+  cancelAnimationFrame(frame); active?.dispose?.();
+  const old = document.querySelector('canvas'), canvas = old.cloneNode(false); old.replaceWith(canvas);
+  class BrokenGL extends GLRenderer { constructor(c) { super(c); this.dispose(); throw Error('Injected failure after WebGL acquisition'); } }
+  try {
+    const picked = createRenderer(canvas, fail ? BrokenGL : GLRenderer, LegacyRenderer, 390, 540);
+    active = picked.renderer;
+    active.setHead({x:195,y:290,rx:70,ry:90,valid:true}); active.setRain(0.8);
+    active.burst(195,100,1,0.04,0.8,0.3);
+    let frames=0; const start=performance.now();
+    const mood={cool:0.4,warm:0.3,flash:0,shockX:0,shockY:0,shockR:0,shockLife:0,bloomBoost:1,shakeX:0,shakeY:0,beauty:0};
+    const draw=()=> { try {
+      active.render(1/60,mood); frames++;
+      if(frames<90) frame=requestAnimationFrame(draw);
+      else {
+        const error=active.gl?.getError() || 0;
+        document.querySelector('#result').textContent = `${error ? 'FAIL' : 'PASS'} | ${picked.backend} | 90 synthetic frames | GL error ${error} | elapsed ${Math.round(performance.now()-start)} ms`;
+      }
+    } catch(e){ document.querySelector('#result').textContent='FAIL '+e.stack; } };
+    frame=requestAnimationFrame(draw);
+  } catch(e) { document.querySelector('#result').textContent='FAIL '+e.stack; }
+}
+document.querySelector('#gpu').onclick=()=>run(false);
+document.querySelector('#fallback').onclick=()=>run(true);
+</script></html>

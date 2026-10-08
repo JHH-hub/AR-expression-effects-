@@ -7,21 +7,24 @@
  *   视频采样映射严格互为逆运算——否则特效会和人脸错位。
  */
 
-import { FaceTracker } from './faceTracker.js?v=20260927c';
-import { ExpressionFSM, State } from './expressionFSM.js?v=20260927c';
-import { PerfMonitor } from './perf.js?v=20260927c';
-import { fitHeadEllipse, createEllipse } from './collision.js?v=20260927c';
-import { GLRenderer, QUALITY } from './glRenderer.js?v=20260927c';
-import { LegacyRenderer } from './legacyRenderer.js?v=20260927c';
-import { UI } from './ui.js?v=20260927c';
+import { FaceTracker } from './faceTracker.js?v=20261008a';
+import { ExpressionFSM, State } from './expressionFSM.js?v=20261008a';
+import { PerfMonitor } from './perf.js?v=20261008a';
+import { fitHeadEllipse, createEllipse } from './collision.js?v=20261008a';
+import { GLRenderer, QUALITY } from './glRenderer.js?v=20261008a';
+import { LegacyRenderer } from './legacyRenderer.js?v=20261008a';
+import { UI } from './ui.js?v=20261008a';
+import { createRenderer } from './rendererFactory.js?v=20261008a';
+import { ExpressionInput } from './expressionInput.js?v=20261008a';
 
 const video = document.getElementById('cam');
-const canvas = document.getElementById('fx');
+let canvas = document.getElementById('fx');
 const stage = document.getElementById('stage');
 
 const ui = new UI();
 const tracker = new FaceTracker();
 const fsm = new ExpressionFSM();
+const expressionInput = new ExpressionInput(fsm);
 const perf = new PerfMonitor(3, 2);
 const head = createEllipse();
 
@@ -103,18 +106,23 @@ function loop(now) {
   if (!running) return;
   rafId = requestAnimationFrame(loop);
 
-  const dt = Math.min((now - lastTime) / 1000, 0.05); // 卡顿时不让物理炸掉
+  const elapsed = Math.max(0, (now - lastTime) / 1000);
+  const dt = Math.min(elapsed, 0.05); // 只钳制物理步长，FPS 使用真实时间
   lastTime = now;
   frame++;
-  perf.tick(dt);
+  perf.tick(elapsed);
+  head.prevX = head.x; head.prevY = head.y;
+  head.prevRx = head.rx; head.prevRy = head.ry; head.prevValid = head.valid;
 
   const q = renderer instanceof GLRenderer ? QUALITY[perf.level] : { detectEvery: perf.level === 0 ? 2 : 1 };
 
   /* 1) 推理（最大一笔算力开销，按预算隔帧执行） */
+  let freshSignal = null;
   if (frame % (q.detectEvery || 1) === 0) {
     const r = tracker.detect(video);
     if (r) {
       sig = r;
+      freshSignal = r;
       if (r.found && r.pts) {
         fitHeadEllipse(r.pts, mapX, mapY, head, 0.4);
         // 嘴部略上方作为发射源：视觉上更像「从口中喷出」而非「从下巴冒出」
@@ -129,12 +137,16 @@ function loop(now) {
   }
 
   /* 2) 表情状态机 */
-  const st = fsm.update(sig, dt);
+  const st = expressionInput.update(freshSignal, now);
+  if (!expressionInput.tracking) {
+    head.valid = false; mouth.ok = false;
+    pending.length = 0;
+  }
 
   if (fsm.calibrating) {
     ui.showCalibrate(
       fsm.calibrateProgress,
-      sig.found ? '请保持自然，不要笑' : '未检测到人脸 · 请正对镜头并确保光线充足',
+      expressionInput.tracking ? '请保持自然，不要笑' : '未检测到新的人脸画面 · 请正对镜头并检查摄像头',
     );
   } else if (ui.el.calib && !ui.el.calib.classList.contains('hidden')) {
     ui.hideCalibrate();
@@ -211,7 +223,7 @@ function loop(now) {
   renderer.setHead(head);
   // 雨量走不对称包络：起雨跟随表情，收雨拖长成"雨渐渐停"。
   // 目标值再抬一档（×1.15 后截断），保证中等笑意就能撑起满屏雨。
-  const rainTarget = Math.min(1, fsm.rainIntensity * 1.15);
+  const rainTarget = expressionInput.tracking ? Math.min(1, fsm.rainIntensity * 1.15) : 0;
   // 半衰期 ↔ 时间常数：k = 1 - 0.5^(dt/halfLife)
   const rainHalf = rainTarget > rainEnv.v ? 0.18 : 1.35;
   rainEnv.v += (rainTarget - rainEnv.v) * (1 - Math.pow(0.5, dt / rainHalf));
@@ -341,23 +353,15 @@ function updateMood(dt, st) {
 /* ---------------- 启动 ---------------- */
 
 function pickRenderer() {
-  const probe = GLRenderer.probe();
-  if (probe.ok) {
-    try {
-      const r = new GLRenderer(canvas);
-      r.setQuality(2);
-      backend = 'WebGL2 · GPU 粒子';
-      return r;
-    } catch (e) {
-      console.warn('[renderer] WebGL2 初始化失败，降级 Canvas2D：', e);
-    }
-  } else {
-    console.warn('[renderer] 降级原因：', probe.reason);
-  }
-  const r = new LegacyRenderer(canvas);
-  r.setQuality(2);
-  backend = 'Canvas2D · 降级模式';
-  return r;
+  const picked = createRenderer(canvas, GLRenderer, LegacyRenderer, W, H);
+  canvas = picked.canvas;
+  backend = picked.backend;
+  return picked.renderer;
+}
+
+function releaseStartupResources() {
+  tracker.stop();
+  video.srcObject = null;
 }
 
 async function boot() {
@@ -370,6 +374,7 @@ async function boot() {
     ui.setGateBusy('正在请求摄像头…');
     await tracker.start(video);
   } catch (e) {
+    releaseStartupResources();
     const name = (e && e.name) || String(e);
     const hint = name === 'NotAllowedError'
       ? '权限被拒绝。请在地址栏的站点设置中允许摄像头后重试。'
@@ -384,6 +389,7 @@ async function boot() {
     ui.setGateBusy('正在加载人脸模型…');
     await tracker.load();
   } catch (e) {
+    releaseStartupResources();
     ui.setGateError(`人脸模型加载失败：${e}。模型来自 CDN，请检查网络后重试。`);
     return;
   }
@@ -392,6 +398,7 @@ async function boot() {
     ui.setGateBusy('正在初始化渲染器…');
     renderer = pickRenderer();
   } catch (e) {
+    releaseStartupResources();
     ui.setGateError(`渲染器初始化失败：${e}`);
     return;
   }
@@ -426,16 +433,25 @@ ui.bind({
     renderer.setBeauty(on);
     ui.toast(on ? '美颜已开启（轻）' : '美颜已关闭 · 摄像头原样');
   },
-  onRecalibrate: () => { fsm.reset(); ui.toast('请保持自然表情 1 秒…'); },
+  onRecalibrate: () => { fsm.reset(); expressionInput.invalidate(); pending.length = 0; ui.toast('请保持自然表情 1 秒…'); },
 });
 
 window.addEventListener('resize', resize);
+window.addEventListener('pagehide', () => {
+  running = false;
+  cancelAnimationFrame(rafId);
+  releaseStartupResources();
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) location.reload();
+});
 if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
 video.addEventListener('loadedmetadata', () => { recomputeVideoBox(); resize(); });
 
 // 切到后台彻底停机：不推理、不模拟、不渲染
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    expressionInput.invalidate(); head.valid = false; mouth.ok = false; pending.length = 0;
     running = false;
     cancelAnimationFrame(rafId);
     video.pause();
@@ -451,6 +467,7 @@ resize();
 
 // 调试钩子：便于真机排查与自动化验证，不带来运行时开销
 window.__ar = {
+  version: '20261008a',
   get renderer() { return renderer; },
   get head() { return head; },
   get backend() { return backend; },

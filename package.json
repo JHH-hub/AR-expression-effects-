@@ -1,0 +1,12 @@
+{
+  "name": "ar-expression-effects",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/regression.mjs",
+    "test:browser": "node tests/browser-check.cjs",
+    "test:renderer": "node tests/render-benchmark.cjs"
+  },
+  "devDependencies": { "playwright": "^1.58.0" }
+}

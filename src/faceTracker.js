@@ -101,7 +101,7 @@ export class FaceTracker {
     };
 
     const smile = (g('mouthSmileLeft') + g('mouthSmileRight')) * 0.5;
-    // 眼周收缩（Duchenne marker）：真笑一定带眼周动作，用它抬高真笑、压低假笑
+    // 眼周收缩作为辅助信号，不单独用于判断笑意。
     const squint = (g('cheekSquintLeft') + g('cheekSquintRight')) * 0.5;
     const jaw = g('jawOpen');
     // 撅嘴/闭嘴动作用于排除「说话」「嘟嘴」被误判成笑
@@ -126,5 +126,9 @@ export class FaceTracker {
   stop() {
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    this._lastVideoTime = -1;
+    if (this.landmarker) this.landmarker.close();
+    this.landmarker = null;
+    this._nameIndex = null;
   }
 }
